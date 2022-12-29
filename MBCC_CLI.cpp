@@ -81,7 +81,7 @@ namespace MBCC
                     return(1);
                 }
             }
-            LLGenerator.WriteLLParser(Grammar,HeaderStream,SourceStream,k);
+            LLGenerator.WriteLLParser(Grammar,HeaderFile,HeaderStream,SourceStream,k);
         }
         catch(std::exception const& e)
         {

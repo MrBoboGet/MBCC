@@ -1,5 +1,8 @@
 /MBPM_Builds/
 /MBPM_BuildFiles/
 /.*
+/out
 /compile_commands.json
+/MBPM_FileInfo
+/CMakeLists.txt
 !.gitignore

@@ -600,7 +600,7 @@ struct Hej1 : Hej2
     //here we only have to verify wheter or not the parse rules and structures abide by the semantics
     void MBCCDefinitions::p_UpdateReferencesAndVerify()
     {
-        if(NonTerminals.size())
+        if(NonTerminals.size() == 0)
         {
             throw std::runtime_error("Semantic error parsing MBCC definitions: cannot construct a parser without any nonterminals");
         }
@@ -872,13 +872,19 @@ struct Hej1 : Hej2
         }
         return(ReturnValue);
     }
-    Tokenizer::Tokenizer(std::string Text,std::vector<Terminal> const& Terminals,std::string const& SkipRegex)
+    Tokenizer::Tokenizer(std::string const& SkipRegex,std::initializer_list<std::string> TerminalRegexes)
     {
-        m_TextData = std::move(Text);
-        for(auto const& Terminal : Terminals)
+        m_Skip = std::regex(SkipRegex); 
+        for(auto const& String : TerminalRegexes)
         {
-            m_TerminalRegexes.push_back(std::regex(Terminal.RegexDefinition));
+            m_TerminalRegexes.emplace_back(String);
         }
+    }
+    void Tokenizer::SetText(std::string NewText)
+    {
+        m_ParseOffset = 0;       
+        m_TextData = std::move(NewText);
+        m_StoredTokens.clear();
     }
     void Tokenizer::ConsumeToken()
     {
@@ -1053,7 +1059,7 @@ struct Hej1 : Hej2
     void LLParserGenerator::p_WriteDefinitions(MBCCDefinitions const& Grammar,std::vector<TerminalStringMap> const& ParseTable,MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut, int k)
     {
     }
-    void LLParserGenerator::WriteLLParser(MBCCDefinitions const& Grammar,MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut,int k)
+    void LLParserGenerator::WriteLLParser(MBCCDefinitions const& Grammar,std::string const& HeaderName,MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut,int k)
     {
         std::vector<bool> ERules = p_RetrieveENonTerminals(Grammar); 
         p_VerifyNotLeftRecursive(Grammar,ERules);
@@ -1075,13 +1081,16 @@ struct Hej1 : Hej2
             TotalProductions.push_back(std::move(Productions));
             NonTermIndex++;
         }
-        p_WriteParser(Grammar,TotalProductions,HeaderOut,SourceOut);
+        CPPStreamIndenter HeaderIndent(&HeaderOut);
+        CPPStreamIndenter SourceIndent(&SourceOut);
+        p_WriteParser(Grammar,TotalProductions,HeaderName,HeaderIndent,SourceIndent);
     } 
     void LLParserGenerator::p_WriteParser(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,
+            std::string const& HeaderName,
         MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut)
     {
+        p_WriteSource(Grammar,ProductionsLOOk,HeaderName,SourceOut); 
         p_WriteHeader(Grammar,HeaderOut);
-        p_WriteSource(Grammar,ProductionsLOOk,HeaderOut,SourceOut); 
     }
     struct i_DependancyInfo
     {
@@ -1192,12 +1201,13 @@ struct Hej1 : Hej2
                 HeaderOut<<"template<typename T> Accept(T const& Visitor) const\n{\nstd::visit(Visitor,*m_Data);\n}\n";
                 HeaderOut<<"template<typename T> "<<CurrentStruct.Name << "(T ObjectToStore)\n{\nm_Data = std::make_unique<std::variant<"<<VariantMembers<<">>(std::move(ObjectToStore));\n}\n";
                 HeaderOut<<CurrentStruct.Name << "() = default";
-                HeaderOut<<"template<typename T> IsType() const\n{\n std::holds_alternative<T>(*m_Data);\n}\n";
-                HeaderOut<<"template<typename T> GetType() const\n{\n std::get<T>(*m_Data);\n}\n";
-                HeaderOut<<"template<typename T> GetType()\n{\n std::get<T>(*m_Data);\n}\n";
+                HeaderOut<<"template<typename T> IsType() const\n{\nstd::holds_alternative<T>(*m_Data);\n}\n";
+                HeaderOut<<"template<typename T> GetType() const\n{\nstd::get<T>(*m_Data);\n}\n";
+                HeaderOut<<"template<typename T> GetType()\n{\nstd::get<T>(*m_Data);\n}\n";
             }  
             else
             {
+                HeaderOut<<"public:\n";
                 for(auto const& Member : CurrentStruct.MemberVariables)
                 {
                     if(Member.IsType<StructMemberVariable_Int>())
@@ -1234,13 +1244,48 @@ struct Hej1 : Hej2
     }
     void LLParserGenerator::p_WriteHeader(MBCCDefinitions const& Grammar, MBUtility::MBOctetOutputStream& HeaderOut)
     {
-        HeaderOut << "#include <MBParsing/MBCC.h>\n"; 
+
+        HeaderOut << "#pragma once\n";
+        HeaderOut << "#include <MBCC/MBCC.h>\n"; 
+        HeaderOut << "#include <string>\n";
+        HeaderOut << "#include <vector>\n";
+        HeaderOut << "#include <stdexcept>\n";
         i_DependancyInfo DepInfo = h_CalculateDependancyInfo(Grammar); 
         h_WriteStructures(Grammar,DepInfo,HeaderOut);
+        p_WriteFunctionHeaders(Grammar,HeaderOut);
+        HeaderOut<<"inline MBCC::Tokenizer GetTokenizer()\n{\nMBCC::Tokenizer ReturnValue("+Grammar.SkipRegex+",{"; 
+        for(auto const& Terminal : Grammar.Terminals)
+        {
+            HeaderOut<<"\""<<Terminal.RegexDefinition<<"\",";   
+        }
+        HeaderOut <<"});\nreturn(ReturnValue);\n}";
+    }
+    void LLParserGenerator::p_WriteFunctionHeaders(MBCCDefinitions const& Grammar,MBUtility::MBOctetOutputStream& HeaderOut)
+    {
+        std::string ReturnValueType = "void";
+        for(NonTerminalIndex NonTermIndex = 0; NonTermIndex < Grammar.NonTerminals.size();NonTermIndex++)
+        {
+            StructDefinition const* AssoicatedStruct = nullptr;
+            NonTerminal const& AssociatedNonTerminal = Grammar.NonTerminals[NonTermIndex];
+            if(AssociatedNonTerminal.AssociatedStruct != -1)
+            {
+                AssoicatedStruct = &Grammar.Structs[AssociatedNonTerminal.AssociatedStruct];    
+            }
+            if(AssoicatedStruct != nullptr)
+            {
+                ReturnValueType = AssoicatedStruct->Name;
+            }
+            MBUtility::WriteData(HeaderOut,ReturnValueType+" Parse"+AssociatedNonTerminal.Name+"(MBCC::Tokenizer& Tokenizer);\n");
+            for(int i = 0; i < AssociatedNonTerminal.Rules.size();i++)
+            {
+                HeaderOut<<ReturnValueType<<" Parse"<<AssociatedNonTerminal.Name<<"_"<<std::to_string(i)<<"(MBCC::Tokenizer& Tokenizer);\n"; 
+            }
+        }
     }
     void LLParserGenerator::p_WriteSource(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,
-        MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut)
+        std::string const& HeaderName,MBUtility::MBOctetOutputStream& SourceOut)
     {
+        SourceOut<<"#include \""<<HeaderName<<"\"\n";
         p_WriteLOOKTable(ProductionsLOOk, SourceOut);
         //MBUtility::WriteData(SourceOut,"#include <MBParsing/MBCC.h>\n");
         //Order we write C/C++/C# implementations dont matter, we can just write them directly
@@ -1249,7 +1294,7 @@ struct Hej1 : Hej2
             p_WriteNonTerminalFunction(Grammar,i,SourceOut);     
             for(int j = 0; j < Grammar.NonTerminals[i].Rules.size();j++)
             {
-                p_WriteNonTerminalProduction(Grammar,i,j,"Parse"+Grammar.NonTerminals[i].Name+"_"+std::to_string(i),SourceOut); 
+                p_WriteNonTerminalProduction(Grammar,i,j,"Parse"+Grammar.NonTerminals[i].Name+"_"+std::to_string(j),SourceOut); 
             }
         }       
     }
@@ -1277,9 +1322,9 @@ struct Hej1 : Hej2
         for(size_t i = 1; i < MatrixesToCombine.size();i++)
         {
             MBMath::MBDynamicMatrix<bool> const& CurrentMatrix = MatrixesToCombine[i];
-            for(int Row = 0; i < CurrentMatrix.NumberOfRows();Row++)
+            for(int Row = 0; Row < CurrentMatrix.NumberOfRows();Row++)
             {
-                for(int Column = 0; i < CurrentMatrix.NumberOfRows();Column++)
+                for(int Column = 0; Column < CurrentMatrix.NumberOfRows();Column++)
                 {
                     ReturnValue(Row,Column) = ReturnValue(Row,Column) || CurrentMatrix(Row,Column); 
                 }    
@@ -1292,64 +1337,70 @@ struct Hej1 : Hej2
 
         //Assumes that zero non terminals is invalid
         m_ProductionPredicates.reserve(ProductionsLOOk.size());
-        //for each non terminal, for each production, for each k for each terminal
+        //for each non termina + production, for each k for each terminal
         //the k+1 production is the combined productions, representing the whole non terminal
+        int TotalProductionSize = 0;
         int LOOKDepth = ProductionsLOOk[0][0].NumberOfColumns();
-        SourceOut << "const bool LOOKTable[][][][] = {";
-        std::vector<MBMath::MBDynamicMatrix<bool>> NonTerminalCombinedProductions;
+        //SourceOut << "const bool LOOKTable[][][][] = {";
+        std::string TableString = "";
         for(auto const& NonTerminalProductions : ProductionsLOOk)
         {
-            SourceOut << "{"; 
-            for(auto const& Production : NonTerminalProductions)
-            {
-                SourceOut << "{";
-                for(int k = 0; k < Production.NumberOfColumns();k++)
-                {
-                    SourceOut << h_ColumnToBoolArray(Production,k);
-                    SourceOut << ",";
-                }
-                SourceOut << "},";
-            } 
             auto CombinedProductions = h_CombineProductions(NonTerminalProductions);
-            SourceOut << "{";
+            TableString += "{";
             for(int k = 0; k < CombinedProductions.NumberOfColumns();k++)
             {
-                SourceOut << h_ColumnToBoolArray(CombinedProductions,k);
-                SourceOut << ",";
+                TableString += h_ColumnToBoolArray(CombinedProductions,k);
+                TableString += ",";
             }
-            NonTerminalCombinedProductions.push_back(std::move(CombinedProductions));
-            SourceOut << "},";
-
-            SourceOut << "},"; 
+            TableString += "},";
+            TotalProductionSize += NonTerminalProductions.size()+1;
+            for(auto const& Production : NonTerminalProductions)
+            {
+                TableString += "{";
+                for(int k = 0; k < Production.NumberOfColumns();k++)
+                {
+                    TableString += h_ColumnToBoolArray(Production,k);
+                    TableString += ",";
+                }
+                TableString += "},";
+            } 
         }  
-        SourceOut <<"};\n";
-        for(int i = 0; i < ProductionsLOOk.size();i++)
+        SourceOut << "const bool LOOKTable["+std::to_string(TotalProductionSize)+"]["+std::to_string(LOOKDepth)+"]["
+            +std::to_string(ProductionsLOOk[0][0].NumberOfRows())+"] = {"<<TableString<<"};\n";
+        int CurrentProductionIndex = 0;
+        for(auto const& CurrentProduction : ProductionsLOOk)
         {
-            auto const& CurrentProduction = ProductionsLOOk[i];
-            std::vector<std::string> NewEntry = std::vector<std::string>(CurrentProduction.size()+1);
-            std::string CombinedString = "LOOKTable["+std::to_string(i)+"]["+std::to_string(CurrentProduction.size()-1)+"[0][Tokenizer.Peek().Type]";
+            std::vector<std::string> NewEntry;
+            NewEntry.reserve(CurrentProduction.size()+1);
+            std::string CombinedString = "LOOKTable["+std::to_string(CurrentProductionIndex)+"][0][Tokenizer.Peek().Type]";
             for(int k = 1; k < LOOKDepth;k++)
             {
-                CombinedString +=  "&& LOOKTable["+std::to_string(i)+"]["+std::to_string(CurrentProduction.size())+"["+std::to_string(k)+"][Tokenizer.Peek("+std::to_string(k)+").Type]";
+                CombinedString +=  "&& LOOKTable["+std::to_string(CurrentProductionIndex)+"]["+std::to_string(k)+"][Tokenizer.Peek("+std::to_string(k)+").Type]";
             }
+            CurrentProductionIndex += 1;
+            assert(CombinedString.size() != 0);
             NewEntry.push_back(CombinedString);
             for(int j = 0; j < CurrentProduction.size();j++)
             {
-                std::string NewString = "LOOKTable["+std::to_string(i)+"]["+std::to_string(j)+"[0][Tokenizer.Peek().Type]";
+                std::string NewString = "LOOKTable["+std::to_string(CurrentProductionIndex)+"][0][Tokenizer.Peek().Type]";
                 for(int k = 1; k < LOOKDepth;k++)
                 {
-                    NewString +=  "&& LOOKTable["+std::to_string(i)+"]["+std::to_string(j)+"["+std::to_string(k)+"][Tokenizer.Peek("+std::to_string(k)+").Type]";
+                    NewString +=  "&& LOOKTable["+std::to_string(CurrentProductionIndex)+"]["+std::to_string(k)+"][Tokenizer.Peek("+std::to_string(k)+").Type]";
                 }
+                assert(NewString.size() != 0);
                 NewEntry.push_back(NewString);
+                CurrentProductionIndex += 1;
             }
+            assert(NewEntry.size() != 0);
             m_ProductionPredicates.push_back(std::move(NewEntry));
         }
     }
     std::string const& LLParserGenerator::p_GetLOOKPredicate(NonTerminalIndex AssociatedNonTerminal,int Production)
     {
+        assert(AssociatedNonTerminal < m_ProductionPredicates.size() && (Production+1 < m_ProductionPredicates[AssociatedNonTerminal].size()));
         if(Production == -1)
         {
-            return(m_ProductionPredicates[AssociatedNonTerminal][Production]);
+            return(m_ProductionPredicates[AssociatedNonTerminal][0]);
         } 
         return(m_ProductionPredicates[AssociatedNonTerminal][Production+1]);
     }
@@ -1366,18 +1417,28 @@ struct Hej1 : Hej2
         {
             ReturnValueType = AssoicatedStruct->Name;
         }
-        MBUtility::WriteData(SourceOut,ReturnValueType+" Parse"+AssociatedNonTerminal.Name+"(MBParsing::Tokenizer& Tokenizer)\n{\n");
+        MBUtility::WriteData(SourceOut,ReturnValueType+" Parse"+AssociatedNonTerminal.Name+"(MBCC::Tokenizer& Tokenizer)\n{\n");
+        SourceOut<<ReturnValueType<<" ReturnValue;\n";
         for(int i = 0; i < AssociatedNonTerminal.Rules.size();i++)
         {
             if(i != 0)
             {
                 MBUtility::WriteData(SourceOut,"else ");   
             }
-            if(i != AssociatedNonTerminal.Rules.size()-1)
+            if(i != AssociatedNonTerminal.Rules.size()-1 || AssociatedNonTerminal.Rules.size() == 1)
             {
                 MBUtility::WriteData(SourceOut,"if "); 
             }
-            MBUtility::WriteData(SourceOut,"("+p_GetLOOKPredicate(NonTermIndex,i)+")\n{\n");    
+            std::string const& LookPredicate = p_GetLOOKPredicate(NonTermIndex,i);
+            assert(LookPredicate.size() != 0);
+            if(AssociatedNonTerminal.Rules.size() == 1 || i + 1 < AssociatedNonTerminal.Rules.size())
+            {
+                MBUtility::WriteData(SourceOut,"("+LookPredicate+")\n{\n");    
+            }
+            else
+            {
+                SourceOut << "\n{\n";
+            }
             if(AssoicatedStruct != nullptr)
             {
                 MBUtility::WriteData(SourceOut,"ReturnValue = ");    
@@ -1386,9 +1447,12 @@ struct Hej1 : Hej2
         }
         if(AssoicatedStruct != nullptr)
         {
-            MBUtility::WriteData(SourceOut,"return(ReturnValue);\n");
+            MBUtility::WriteData(SourceOut,"return(ReturnValue);\n}\n");
         }
-        MBUtility::WriteData(SourceOut,"}\n");
+        else
+        {
+            MBUtility::WriteData(SourceOut,"}\n");
+        }
     }
     void LLParserGenerator::p_WriteNonTerminalProduction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTermIndex,int ProductionIndex,std::string const& FunctionName,MBUtility::MBOctetOutputStream& SourceOut)
     {
@@ -1404,7 +1468,7 @@ struct Hej1 : Hej2
         {
             ReturnValueType = AssoicatedStruct->Name;
         }
-        MBUtility::WriteData(SourceOut,ReturnValueType+" "+FunctionName+"(MBParsing::Tokenizer& Tokenizer)\n{\n");
+        MBUtility::WriteData(SourceOut,ReturnValueType+" "+FunctionName+"(MBCC::Tokenizer& Tokenizer)\n{\n");
         if(AssociatedNonTerminal.AssociatedStruct != -1)
         {
             MBUtility::WriteData(SourceOut,AssoicatedStruct->Name + " ReturnValue;\n");
@@ -1413,8 +1477,8 @@ struct Hej1 : Hej2
         {
             if(Component.IsTerminal)
             {
-                MBUtility::WriteData(SourceOut,"if(Tokenizer.Peek().Type != "+std::to_string(Component.ComponentIndex)+")\n{throw std::runtime_error(\"Error parsing "+AssociatedNonTerminal.Name+": expected "+Grammar.NonTerminals[Component.ComponentIndex].Name
-                        +")\n}\nTokenizer.ConsumeToken();\n");
+                MBUtility::WriteData(SourceOut,"if(Tokenizer.Peek().Type != "+std::to_string(Component.ComponentIndex)+")\n{\nthrow std::runtime_error(\"Error parsing "+AssociatedNonTerminal.Name+": expected "+Grammar.Terminals[Component.ComponentIndex].Name
+                        +"\");\n}\n");
                 if(Component.AssignedMember != "")
                 {
                     MBUtility::WriteData(SourceOut,"ReturnValue."+Component.AssignedMember+"= ");
@@ -1442,23 +1506,25 @@ struct Hej1 : Hej2
                 } 
                 else if(Component.Min == 0 && Component.Max == -1)
                 {
-                    MBUtility::WriteData(SourceOut,"if("+p_GetLOOKPredicate(NonTermIndex,ProductionIndex)+")\n{");
+                    MBUtility::WriteData(SourceOut,"while("+p_GetLOOKPredicate(Component.ComponentIndex)+")\n{");
+                    if(Component.AssignedMember != "")
+                    {
+                        MBUtility::WriteData(SourceOut,"ReturnValue."+Component.AssignedMember+".push_back("); 
+                        MBUtility::WriteData(SourceOut,"Parse"+Grammar.NonTerminals[Component.ComponentIndex].Name+"(Tokenizer));\n}\n");
+                    }
+                    else
+                    {
+                        MBUtility::WriteData(SourceOut,"Parse"+Grammar.NonTerminals[Component.ComponentIndex].Name+"(Tokenizer);\n}\n");
+                    }
+                }
+                else if(Component.Min == 0 && Component.Max == 1)
+                {
+                    MBUtility::WriteData(SourceOut,"if("+p_GetLOOKPredicate(Component.ComponentIndex)+")\n{");
                     if(Component.AssignedMember != "")
                     {
                         MBUtility::WriteData(SourceOut,"ReturnValue."+Component.AssignedMember+"= "); 
                     }
-                    MBUtility::WriteData(SourceOut,"Parse"+Grammar.NonTerminals[Component.ComponentIndex].Name+"(Tokenizer);\n");
-                    MBUtility::WriteData(SourceOut,"}\n");
-                }
-                else if(Component.Min == 0 && Component.Max == 1)
-                {
-                    MBUtility::WriteData(SourceOut,"if("+p_GetLOOKPredicate(NonTermIndex,ProductionIndex)+")\n{");
-                    if(Component.AssignedMember != "")
-                    {
-                        MBUtility::WriteData(SourceOut,"ReturnValue."+Component.AssignedMember+".push_back("); 
-                    }
-                    MBUtility::WriteData(SourceOut,"Parse"+Grammar.NonTerminals[Component.ComponentIndex].Name+"(Tokenizer));\n");
-                    MBUtility::WriteData(SourceOut,"}\n");
+                    MBUtility::WriteData(SourceOut,"Parse"+Grammar.NonTerminals[Component.ComponentIndex].Name+"(Tokenizer);\n}\n");
                 }
                 else
                 {
@@ -1466,7 +1532,63 @@ struct Hej1 : Hej2
                 }
             }
         }
-        MBUtility::WriteData(SourceOut,"}\n");
+        MBUtility::WriteData(SourceOut,"return(ReturnValue);\n}\n");
     }
 //END LLParserGenerator
+    
+    //BEGIN CPPStreamIndenter
+    CPPStreamIndenter::CPPStreamIndenter(MBUtility::MBOctetOutputStream* StreamToConvert)
+    {
+        m_AssociatedStream = StreamToConvert;       
+    }
+    size_t CPPStreamIndenter::Write(const void* DataToWrite,size_t DataSize)
+    {
+        size_t ReturnValue = DataSize;       
+        size_t ParseOffset = 0; 
+        const char* CharData = (const char*)DataToWrite;
+        while(ParseOffset < DataSize)
+        {
+            size_t NextLWing = std::find(CharData+ParseOffset,CharData+DataSize,'{')-CharData;
+            size_t NextRWing = std::find(CharData+ParseOffset,CharData+DataSize,'}')-CharData;
+            size_t NextNL = std::find(CharData+ParseOffset,CharData+DataSize,'\n')-CharData;
+            if(NextNL != DataSize || NextRWing != DataSize || NextLWing != DataSize)
+            {
+                size_t Min = std::min(std::min(NextLWing,NextRWing),NextNL);
+                m_AssociatedStream->Write(CharData+ParseOffset,Min+1-ParseOffset);
+                ParseOffset = Min+1;
+                if(Min == NextRWing)
+                {
+                    m_IndentLevel -=1;
+                    if(m_IndentLevel < 0)
+                    {
+                        m_IndentLevel = 0;   
+                    }
+                }
+                else if(Min == NextLWing)
+                {
+                    m_IndentLevel += 1;
+                }
+                else if(Min == NextNL)
+                {
+                    int IndentToWrite = m_IndentLevel;
+                    if(ParseOffset < DataSize && CharData[ParseOffset] == '}' && IndentToWrite != 0)
+                    {
+                        IndentToWrite -=1;
+                    }
+                    char IndentData[4] = {' ',' ',' ',' '};
+                    for(int i = 0; i < IndentToWrite;i++)
+                    {
+                        m_AssociatedStream->Write(IndentData,4);   
+                    }
+                }
+            }
+            else
+            {
+                m_AssociatedStream->Write(CharData+ParseOffset,DataSize-ParseOffset);    
+                ParseOffset = DataSize;
+            }
+        }
+        return(ReturnValue);
+    }
+    //END CPPStreamIndenter
 }

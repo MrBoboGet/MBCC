@@ -73,7 +73,8 @@ int main(int argc, char** argv)
     MBCC::MBCCDefinitions Result = MBCC::MBCCDefinitions::ParseDefinitions(FileData.data(),FileData.size(),0,Error);
     if(Error != "")
     {
-        std::cout<<Error<<std::endl;   
+        std::cout<<Error<<std::endl;  
+        return 1;
     }
     PrintResult(Result);
     MBUtility::MBFileOutputStream SourceFile("MBObjectSpec_Parser.cpp");
@@ -81,7 +82,7 @@ int main(int argc, char** argv)
     try
     {
         MBCC::LLParserGenerator Generator;
-        Generator.WriteLLParser(Result,SourceFile,HeaderFile,1);
+        Generator.WriteLLParser(Result,"MBObjectSpec_Parser.h",HeaderFile,SourceFile,1);
 
     }
     catch(std::exception const& e)

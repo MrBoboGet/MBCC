@@ -152,7 +152,8 @@ namespace MBCC
         std::unordered_map<std::string,NonTerminalIndex> NameToNonTerminal;
         std::unordered_map<std::string,TerminalIndex> NameToTerminal;
         std::unordered_map<std::string,StructIndex> NameToStruct;
-
+        
+        std::string SkipRegex;
         NonTerminalIndex Start = -1;
 
         static MBCCDefinitions ParseDefinitions(const char* Data,size_t DataSize,size_t ParseOffset);
@@ -232,9 +233,19 @@ namespace MBCC
         std::deque<Token> m_StoredTokens;
         Token p_ExtractToken();
     public:
-        Tokenizer(std::string Text,std::vector<Terminal> const& Terminals,std::string const& SkipRegex);
+        Tokenizer(std::string const& SkipRegex,std::initializer_list<std::string> TerminalRegexes);
+        void SetText(std::string NewText);
         void ConsumeToken();
         Token const& Peek(int Depth = 0);
+    };
+    class CPPStreamIndenter : public MBUtility::MBOctetOutputStream
+    {
+    private:       
+        MBUtility::MBOctetOutputStream* m_AssociatedStream = nullptr;
+        int m_IndentLevel = 0;
+    public:
+        CPPStreamIndenter(MBUtility::MBOctetOutputStream* StreamToConvert);
+        size_t Write(const void* DataToWrite,size_t DataSize) override;
     };
     class LLParserGenerator
     {
@@ -248,10 +259,12 @@ namespace MBCC
         //TerminalIndex = -1 sentinel for empty rule, +1 for empty, +2 for EOF
         void p_WriteDefinitions(MBCCDefinitions const& Grammar,std::vector<TerminalStringMap> const& ParseTable,MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut, int k);
         void p_WriteParser(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,
+                std::string const& HeaderName,
                 MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut);
         void p_WriteHeader(MBCCDefinitions const& Grammar, MBUtility::MBOctetOutputStream& HeaderOut);
+        void p_WriteFunctionHeaders(MBCCDefinitions const& Grammar,MBUtility::MBOctetOutputStream& HeaderOut);
         void p_WriteSource(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,
-                MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut);
+                std::string const& HeaderName,MBUtility::MBOctetOutputStream& SourceOut);
         void p_WriteLOOKTable(std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,MBUtility::MBOctetOutputStream& SourceOut);
         std::string const& p_GetLOOKPredicate(NonTerminalIndex AssociatedNonTerminal,int Production = -1);
         std::vector<std::vector<std::string>> m_ProductionPredicates;
@@ -260,6 +273,6 @@ namespace MBCC
         //Could possibly cache result
         //-1 to specify full look
     public:
-        void WriteLLParser(MBCCDefinitions const& InfoToWrite,MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut,int k = 2);
+        void WriteLLParser(MBCCDefinitions const& InfoToWrite,std::string const& HeaderName,MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut,int k = 2);
     };
 }

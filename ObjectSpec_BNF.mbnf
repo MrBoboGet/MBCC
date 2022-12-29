@@ -1,0 +1,23 @@
+term LPar = "(";
+term RPar = ")";
+term lcurl = "{";
+term rcurl = "}";
+term lsquare = "[";
+term rsquare = "]";
+term idf = "[[:alpha:]_]+[[:alphanum:]_]*";
+term struct = "struct";
+term semicolon = ";";
+
+struct StructDefinition
+{
+    List<MemberDefinition> Members;
+}
+struct MemberDefinition
+{
+    String Type = "";
+    String Name = "";
+}
+def StructDefinition=StructDefinition;
+def MemberDefinition=MemberDefinition;
+StructDefinition = struct idf lcurl Members=MemberDefinition* rcurl;
+MemberDefinition = Type=idf Name=idf semicolon | lsquare Type=idf Name=idf semicolon rsquare;
