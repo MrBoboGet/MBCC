@@ -1,0 +1,5 @@
+/MBPM_Builds/
+/MBPM_BuildFiles/
+/.*
+/compile_commands.json
+!.gitignore

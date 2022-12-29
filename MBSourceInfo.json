@@ -1,0 +1,46 @@
+{
+    "Dependancies": 
+    [
+        "MBParsing",
+        "MBCLI"
+    ],
+    "ExtraIncludes": 
+    [
+
+    ],
+    "Language":"C++",
+    "Standard":"C++17",
+    "Targets": 
+    {
+        "lib": 
+        {
+            "OutputName":"MBCC",
+            "Sources": 
+            [
+                "/MBCC.cpp"
+            ],
+            "TargetType":"Library"
+        },
+        "mbcc": 
+        {
+            "OutputName":"mbcc",
+            "Sources": 
+            [
+                "/MBCC.cpp",
+                "/MBCC_CLI.cpp",
+                "/MBCC_Main.cpp"
+            ],
+            "TargetType":"Executable"
+        },
+        "BNFTest": 
+        {
+            "OutputName":"BNFTest",
+            "Sources": 
+            [
+                "/MBCC.cpp",
+                "/MBParsing_MBBNFTest.cpp"
+            ],
+            "TargetType":"Executable"
+        }
+    }
+}

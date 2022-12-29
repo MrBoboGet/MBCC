@@ -1,0 +1,5 @@
+{
+	"PacketName":"MBCC",
+	"Attributes":[],
+	"Dependancies":["MBParsing","MBCLI"]
+}
