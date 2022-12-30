@@ -21,8 +21,8 @@ StructDefinition ParseStructDefinition_0(MBCC::Tokenizer& Tokenizer);
 MemberDefinition ParseMemberDefinition(MBCC::Tokenizer& Tokenizer);
 MemberDefinition ParseMemberDefinition_0(MBCC::Tokenizer& Tokenizer);
 MemberDefinition ParseMemberDefinition_1(MBCC::Tokenizer& Tokenizer);
- MBCC::Tokenizer GetTokenizer()
+inline MBCC::Tokenizer GetTokenizer()
 {
-    MBCC::Tokenizer ReturnValue("",{"(",")","{","}","[","]","[[:alpha:]_]+[[:alphanum:]_]*","struct",";",});
+    MBCC::Tokenizer ReturnValue(" \t\n",{"(",")","{","}","[","]","[[:alpha:]_]+[[:alphanum:]_]*","struct",";",});
     return(ReturnValue);
 }

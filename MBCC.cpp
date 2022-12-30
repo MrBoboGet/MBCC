@@ -648,6 +648,26 @@ struct Hej1 : Hej2
                 ReturnValue.NameToStruct[NewStruct.Name] = StructIndex;
                 ReturnValue.Structs.push_back(std::move(NewStruct));
             }
+            else if(CurrentIdentifier == "skip")
+            {
+                if(ReturnValue.SkipRegex != "")
+                {
+                    throw std::runtime_error("Semantic error parsing MBCC definitions: there can only be one skip regex");   
+                }
+                MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
+                MBError ParseError = true;
+                ReturnValue.SkipRegex = MBParsing::ParseQuotedString(Data,DataSize,ParseOffset,&ParseOffset,&ParseError);
+                if(!ParseError)
+                {
+                    throw std::runtime_error("Syntax error parsing MBCC definitions: Error parsing skip statement: "+ParseError.ErrorMessage);
+                }
+                MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
+                if(ParseOffset >= DataSize || Data[ParseOffset] != ';')
+                {
+                    throw std::runtime_error("Syntax error parsing MBCC definitions: Skip statement needs delimiting ; to mark end");
+                }
+                ParseOffset += 1;
+            }
             else
             {
                 std::vector<ParseRule> NewRules = p_ParseParseRules(Data,DataSize,ParseOffset,&ParseOffset);
@@ -685,6 +705,10 @@ struct Hej1 : Hej2
                 throw std::runtime_error("Semantic error parsing MBCC definitions: def referencing undefined struct \""+Def.second+"\"");    
             }
             ReturnValue.NonTerminals[ReturnValue.NameToNonTerminal[Def.first]].AssociatedStruct = ReturnValue.NameToStruct[Def.second];
+        }
+        if(ReturnValue.SkipRegex == "")
+        {
+            throw std::runtime_error("Semantic error parsing MBCC definitions: Skip regex is mandatory in order to construct tokenizer");   
         }
         ReturnValue.p_UpdateReferencesAndVerify();
         return(ReturnValue);
@@ -849,10 +873,14 @@ struct Hej1 : Hej2
         }
         std::smatch Match;
         std::string const& TextRef = m_TextData;
+        if(std::regex_search(TextRef.begin()+m_ParseOffset,TextRef.end(),Match,m_Skip,std::regex_constants::match_continuous))
+        {
+            assert(Match.size() == 1);        
+            m_ParseOffset += Match[0].length();    
+        }
         for(TerminalIndex i = 0; i < m_TerminalRegexes.size();i++)
         {
-            std::string const& TextRef = m_TextData;
-            if(std::regex_search(TextRef.begin(),TextRef.end(),Match,m_TerminalRegexes[i]),std::regex_constants::match_continuous)
+            if(std::regex_search(TextRef.begin()+m_ParseOffset,TextRef.end(),Match,m_TerminalRegexes[i],std::regex_constants::match_continuous))
             {
                 assert(Match.size() == 1);        
                 ReturnValue.Value = Match[0].str();
@@ -865,16 +893,11 @@ struct Hej1 : Hej2
         {
             throw std::runtime_error("Invalid character sequence: no terminal matching input at byte offset "+std::to_string(m_ParseOffset));   
         }
-        if(std::regex_search(TextRef.begin()+m_ParseOffset,TextRef.end(),Match,m_Skip))
-        {
-            assert(Match.size() == 1);        
-            m_ParseOffset += Match[0].length();    
-        }
         return(ReturnValue);
     }
     Tokenizer::Tokenizer(std::string const& SkipRegex,std::initializer_list<std::string> TerminalRegexes)
     {
-        m_Skip = std::regex(SkipRegex); 
+        m_Skip = std::regex(SkipRegex,std::regex_constants::ECMAScript|std::regex_constants::nosubs); 
         for(auto const& String : TerminalRegexes)
         {
             m_TerminalRegexes.emplace_back(String);
@@ -1253,7 +1276,7 @@ struct Hej1 : Hej2
         i_DependancyInfo DepInfo = h_CalculateDependancyInfo(Grammar); 
         h_WriteStructures(Grammar,DepInfo,HeaderOut);
         p_WriteFunctionHeaders(Grammar,HeaderOut);
-        HeaderOut<<"inline MBCC::Tokenizer GetTokenizer()\n{\nMBCC::Tokenizer ReturnValue("+Grammar.SkipRegex+",{"; 
+        HeaderOut<<"inline MBCC::Tokenizer GetTokenizer()\n{\nMBCC::Tokenizer ReturnValue(\""+Grammar.SkipRegex+"\",{"; 
         for(auto const& Terminal : Grammar.Terminals)
         {
             HeaderOut<<"\""<<Terminal.RegexDefinition<<"\",";   

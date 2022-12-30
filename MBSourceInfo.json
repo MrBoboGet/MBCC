@@ -38,8 +38,7 @@
             "Sources": 
             [
                 "/MBCC.cpp",
-                "/MBParsing_MBBNFTest.cpp",
-                "/MBObjectSpec_Parser.cpp"
+                "/MBParsing_MBBNFTest.cpp"
             ],
             "TargetType":"Executable"
         }

@@ -16,23 +16,23 @@ namespace MBCC
         {
             std::string HeaderFile;
             std::string SourceFile;
-            if(Input.CommandOptions.find("h") == Input.CommandOptions.end())
+            if(Input.CommandArgumentOptions.find("h") == Input.CommandArgumentOptions.end())
             {
                 AssociatedTerminal.PrintLine("Parser generation requires the path for the output header file specified with the -h option");   
                 return(1);
             }
-            if(Input.CommandArgumentOptions["h"].size() > 0)
+            if(Input.CommandArgumentOptions["h"].size() > 1)
             {
                 AssociatedTerminal.PrintLine("Can only specify one output header file");    
                 return(1);
             }
             HeaderFile = Input.CommandArgumentOptions["h"][0];
-            if(Input.CommandOptions.find("s") == Input.CommandOptions.end())
+            if(Input.CommandArgumentOptions.find("s") == Input.CommandArgumentOptions.end())
             {
                 AssociatedTerminal.PrintLine("Parser generation requires the path for the output source file specified with -s option");   
                 return(1);
             }
-            if(Input.CommandArgumentOptions["s"].size() > 0)
+            if(Input.CommandArgumentOptions["s"].size() > 1)
             {
                 AssociatedTerminal.PrintLine("Can only specify one output source file");    
                 return(1);
@@ -60,9 +60,9 @@ namespace MBCC
             MBUtility::MBFileOutputStream SourceStream(&OutSource);
             std::string TotalFileData = MBUtility::ReadWholeFile(Input.CommandArguments[0]);
             MBCC::MBCCDefinitions Grammar;
-            MBCC::MBCCDefinitions::ParseDefinitions(TotalFileData.data(),TotalFileData.size(),0);
+            Grammar = MBCC::MBCCDefinitions::ParseDefinitions(TotalFileData.data(),TotalFileData.size(),0);
             MBCC::LLParserGenerator LLGenerator;
-            int k = 2;
+            int k = 1;
             if(Input.CommandArgumentOptions.find("k") != Input.CommandArgumentOptions.end())
             {
                 auto const& KVector = Input.CommandArgumentOptions["k"];    

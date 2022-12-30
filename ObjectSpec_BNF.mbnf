@@ -7,6 +7,7 @@ term rsquare = "]";
 term idf = "[[:alpha:]_]+[[:alphanum:]_]*";
 term struct = "struct";
 term semicolon = ";";
+skip " \\t\\n";
 
 struct StructDefinition
 {
