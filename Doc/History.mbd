@@ -1,0 +1,115 @@
+% History and design philosophy 
+
+This document describes the history leading up to the creation of the project,
+aswell as the design philosphy underpining the project and the goals of the
+program. It might provide an entry point for understanding what the program is
+intended and not intended to do, aswell as the rationale for why things are as
+they are, but is not neccessary to use the program.
+
+# History 
+
+    Formal languages are perhaps the most fundamental part of programming.
+    Programming is telling the computer what to do, and one of the best ways to
+    tell a computer what to do, that is both easy to input and read by both a
+    human and computer is through the use some language. While regular general
+    purpose programming languages often times are sufficent to describe what we
+    want to computer to do, they are not neccessary always the most efficient
+    way. But the overhead of implementing a domain specific langauge is often
+    times much to large to create a better solution. This is something I wanted
+    to change.
+
+    The motivation for the project came from when I started working on
+    @[WarCards](/{WarCards}). A wargame inspired by 40k, it features lot's of
+    units with movement and complicated rules, and most importantly effects.
+    This was when *the parser* was concieved. What if there were a way to
+    describe the effects in text in such a way that they could be parsed
+    directly to the internal representation? This would greatly speed up the
+    prototyping of effects and units, and even enable the user to create their
+    own custom units.
+
+    But uppon formulating this use case, I also realised that there were
+    multiple situations where a custom language niche language could be useful.
+    It didn't need to have lot of features, be general purpose programming
+    language, but only needed to improve some aspect of the communication with
+    the computer. I realised that I wanted to not create one parser but many.
+
+    There are plenty of compiler compilers out there. So many that the most well
+    known is named after that fact. The need/use for this project is not
+    especially unique. However, the scope might be a bit different. Many
+    compiler compilers support the ability to perform arbitrary code execution
+    during compilation time, performing both actions modifying the AST aswell as
+    some arbitrary function in the target language. This is not the case for
+    MBCC. MBCC is intended to solely be a way to easily and efficently create an
+    AST, aswell as being able to efficently traverse it.
+
+#_ Design goals and guiding principles
+
+    # Language portability over expresiveness
+
+        Parsing a language should not be a priviliged operation only permitted
+        to one specific program/library. A advantage of formal specification of
+        a language is the ability for other users to understand how it works,
+        and create their own tools. A parser specification that can only create
+        a parser for one target language destroys this advantage, and having
+        separate compiler specifications for each target language can also
+        easily become a maintenance nightmare. Every different language still
+        have to provide the same semantics, and creating the AST in the target
+        langauge can easily lead to subtle errors that harm interoperability.
+
+    # Only produce an AST
+
+        Many parser generators are incredibly powerful programs. They allow the
+        user to not only parse the text, but also evaluate it. This does
+        however but on a lot of constraints on the implementation of the parser.
+        It also makes the grammar specification not very portable across
+        languges.
+
+    # Make semantic actions unneccesary
+
+        Semantic actions might have a purpose, and can provide functionality that
+        is catered to a very specific use case. The project being created on the
+        idea of making niche languages implementable should also not strive to
+        arbitrarly impede this process. It should however, make its utmost to
+        remove the need to include semantic actions.
+
+        Semantic action that are implemented in the target language are
+        inherently not portable, so everytime a semantic actions is needed is a
+        time where the parser specification becomes non-portable.
+    
+    # Pasing decicions reside solely in the grammar
+        
+        CFG's are ultimately only a means to and end. Having a good mathematical
+        formalism a lot we can prove many useful properties about them, and more
+        easily reason about possible implementations. But their "practical"
+        value comes from their ability to describe the abstract syntax tree. 
+
+        This idea might lead one to extend the parsing decisions with conflict
+        handlers or other user specified code. I however think that this is
+        wrong. Because CFG's have another useful property, they provide a
+        complete specification for the syntax, and this is lost when parsing
+        decisions are based on user input.
+
+        Ambiguous grammar's aren't less ambiguous just because they get parsed
+        the same way by a program everytime. It only meant that production rules
+        are not sufficent to describe the parsing. This means that the BNF
+        loses it's self documentating ability and requires runtime semantics
+        that are inherent to the target language, and which no longer provide
+        any form of guarantees. Deterministic CFG's are parsable in linear time
+        with an algorithm that can be guaranteed to halt, something that might
+        not be guaranteed when aribtrary parsing decisions are provided by the
+        user.
+
+    # Improve language tooling 
+
+        Creating custom languages are not only hard because of the parsing and
+        interpretation, but using the language efficiently also provide that
+        there exists some tooling. Syntax LSP capabilities such as syntax
+        highlightning and completion might require a completely custom LSP.
+        Editing white text without any help quickly becomes tedious.
+
+        Implementing these capabilities are often times intrinsically connected
+        with the parsing of the language, and most languages want to provide
+        mostly the same functionality to the user, and should therefor have
+        generic support form the parser creator.
+   
+/_  

@@ -1,0 +1,27 @@
+%title MBCC
+
+mbcc is a compiler compiler for C++ and C#, that supports
+linear-approximate-LL(k) grammars.
+
+The history and design philosopy of the project can be read about in 
+@[History](History.mbd), but is not strictly neccessary to understand the rest
+of the documentation.
+
+MBCC is largely split into 3 separate parts, the compiler specification
+fileformat which describes how the compiler should be generated, the language
+backends which create the code for the target language, and the CLI. 
+
+# MBBNF
+
+    The semantics and syntacs of the file needed for the parser creation is
+    detailed in @[MBBNF](MBBNF.mbd).
+
+# Language backends
+
+    How the code is generated for the target language is described in 
+    @[language backends](LanguageBackends.mbd).
+
+# CLI 
+    
+    How the program is invoked from the command line is described in
+    @[CLI](CLI.mbd).

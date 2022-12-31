@@ -806,7 +806,7 @@ struct Hej1 : Hej2
         } 
     }
     //NOTE exponential time implementation
-    std::vector<bool> GLA::p_LOOK(GLANode& Node,int k)
+    std::vector<bool> GLA::p_LOOK(GLANode& Node,int k) const
     {
         std::vector<bool> ReturnValue = std::vector<bool>(m_TerminalCount);
         if(k == -1)
@@ -841,7 +841,7 @@ struct Hej1 : Hej2
         Node.Visiting[k] = false;
         return(ReturnValue);
     }
-    MBMath::MBDynamicMatrix<bool> GLA::LOOK(NonTerminalIndex NonTerminal,int ProductionIndex,int k)
+    MBMath::MBDynamicMatrix<bool> GLA::LOOK(NonTerminalIndex NonTerminal,int ProductionIndex,int k) const
     {
         MBMath::MBDynamicMatrix<bool> ReturnValue(m_TerminalCount,k);
         auto& Node = m_Nodes[m_Nodes[NonTerminal].Edges[ProductionIndex].Connection];
@@ -877,6 +877,10 @@ struct Hej1 : Hej2
         {
             assert(Match.size() == 1);        
             m_ParseOffset += Match[0].length();    
+        }
+        if(m_ParseOffset == m_TextData.size())
+        {
+            return(ReturnValue);
         }
         for(TerminalIndex i = 0; i < m_TerminalRegexes.size();i++)
         {
@@ -929,7 +933,7 @@ struct Hej1 : Hej2
         return(m_StoredTokens[Depth]);
     }
     //BEGIN LLParserGenerator
-    std::vector<bool> LLParserGenerator::p_RetrieveENonTerminals(MBCCDefinitions const& Grammar)
+    std::vector<bool> CalculateENonTerminals(MBCCDefinitions const& Grammar)
     {
         std::vector<bool> ReturnValue = std::vector<bool>(Grammar.NonTerminals.size(),false);
         //Transitive closure algorithm, naive implementation
@@ -945,20 +949,21 @@ struct Hej1 : Hej2
                 auto const& NonTerminal = Grammar.NonTerminals[i];   
                 for(auto const& Rule : NonTerminal.Rules)
                 {
-                    bool IsENonTerminal = true;
+                    bool IsERule = true;
                     for(auto const& Component : Rule.Components)
                     {
                         if(Component.IsTerminal)
                         {
+                            IsERule = false;
                             break;   
                         }
                         if(Component.Min != 0 && !ReturnValue[Component.ComponentIndex])
                         {
-                            IsENonTerminal = false;
+                            IsERule = false;
                             break;
                         }
                     }  
-                    if(IsENonTerminal)
+                    if(IsERule)
                     {
                         HasChanged = true;
                         ReturnValue[i] = true;
@@ -972,6 +977,10 @@ struct Hej1 : Hej2
             }
         }
         return ReturnValue;         
+    }
+    std::vector<bool> LLParserGenerator::p_RetrieveENonTerminals(MBCCDefinitions const& Grammar)
+    {
+        return(CalculateENonTerminals(Grammar));
     }
     //Maybe kinda slow, should do a proper ordo analysis of the algorithm
     void p_VerifyNonTerminalLeftRecursive(NonTerminalIndex CurrentIndex,std::vector<bool>& VisitedTerminals,std::vector<bool> const& ERules,MBCCDefinitions const& Grammar)
@@ -996,6 +1005,10 @@ struct Hej1 : Hej2
                 }
             }  
         }
+    }
+    void LLParserGenerator::VerifyNotLeftRecursive(MBCCDefinitions const& Grammar,std::vector<bool> const& ERules)
+    {
+        return(p_VerifyNotLeftRecursive(Grammar,ERules)); 
     }
     void LLParserGenerator::p_VerifyNotLeftRecursive(MBCCDefinitions const& Grammar,std::vector<bool> const& ERules)
     {
@@ -1058,52 +1071,50 @@ struct Hej1 : Hej2
         }
         return(ReturnValue);
     }
-    void h_PrintProduction(NonTerminal const& NonTerm,std::vector<MBMath::MBDynamicMatrix<bool>> const& Productions,MBCCDefinitions const& Grammar)
-    {
-        std::cout<<"NonTerminal lookahead: "<<NonTerm.Name<<std::endl;
-        for(auto const& LookaheadInfo : Productions)
-        {
-            std::cout<<"Production 1:"<<std::endl;
-            for(int i = 0; i < LookaheadInfo.NumberOfColumns();i++)
-            {
-                std::cout<<"Level "<<std::to_string(i+1)<<":"<<std::endl;
-                for(int j = 0; j < LookaheadInfo.NumberOfRows();j++)
-                {
-                    if(LookaheadInfo(j,i))
-                    {
-                        std::cout<<Grammar.Terminals[j].Name<<" ";   
-                    }
-                }    
-                std::cout << std::endl;
-            }
-            std::cout<<std::endl;
-        }
-    }
     void LLParserGenerator::p_WriteDefinitions(MBCCDefinitions const& Grammar,std::vector<TerminalStringMap> const& ParseTable,MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut, int k)
     {
     }
-    void LLParserGenerator::WriteLLParser(MBCCDefinitions const& Grammar,std::string const& HeaderName,MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut,int k)
+    std::string LLParserGenerator::Verify(MBCCDefinitions const& Grammar)
     {
-        std::vector<bool> ERules = p_RetrieveENonTerminals(Grammar); 
-        p_VerifyNotLeftRecursive(Grammar,ERules);
-        GLA GrammarGLA(Grammar,k);
+        std::string ReturnValue;
+        try
+        {
+            std::vector<bool> ERules = p_RetrieveENonTerminals(Grammar); 
+            p_VerifyNotLeftRecursive(Grammar,ERules);
+        }
+        catch(std::exception const& e)
+        {
+            ReturnValue = e.what();   
+        }
+        return(ReturnValue);
+    }
+    std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> LLParserGenerator::CalculateProductionsLinearApproxLOOK(MBCCDefinitions const& Grammar,
+            std::vector<bool> const& ERules,GLA const& GrammarGLA,int k)
+    {
+        std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> ReturnValue;
         NonTerminalIndex NonTermIndex = 0;
-        std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> TotalProductions;
-            for(auto const& NonTerminal : Grammar.NonTerminals)
+        for(auto const& NonTerminal : Grammar.NonTerminals)
         {
             std::vector<MBMath::MBDynamicMatrix<bool>> Productions = std::vector<MBMath::MBDynamicMatrix<bool>>(NonTerminal.Rules.size());
             for(int i = 0; i < NonTerminal.Rules.size();i++)
             {
                 Productions[i] = GrammarGLA.LOOK(NonTermIndex,i,k);
             }
-            h_PrintProduction(NonTerminal,Productions,Grammar);
             if(!h_RulesAreDisjunct(Productions))
             {
                 throw std::runtime_error("Error creating linear-approximate-LL("+std::to_string(k)+") parser for grammar: Rule \""+NonTerminal.Name+"\" is non deterministic");
             }
-            TotalProductions.push_back(std::move(Productions));
+            ReturnValue.push_back(std::move(Productions));
             NonTermIndex++;
         }
+        return(ReturnValue);
+    }
+    void LLParserGenerator::WriteLLParser(MBCCDefinitions const& Grammar,std::string const& HeaderName,MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut,int k)
+    {
+        std::vector<bool> ERules = p_RetrieveENonTerminals(Grammar); 
+        p_VerifyNotLeftRecursive(Grammar,ERules);
+        GLA GrammarGLA(Grammar,k);
+        std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> TotalProductions = CalculateProductionsLinearApproxLOOK(Grammar,ERules,GrammarGLA,k);
         CPPStreamIndenter HeaderIndent(&HeaderOut);
         CPPStreamIndenter SourceIndent(&SourceOut);
         p_WriteParser(Grammar,TotalProductions,HeaderName,HeaderIndent,SourceIndent);

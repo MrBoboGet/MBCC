@@ -207,16 +207,16 @@ namespace MBCC
         //The first size(NonTerm) is the Initial nodes, the following size(NonTerm) are the accepting nodes, and then 
         //the following are internal connections
         //Maybe replace with MBVector if the size of the GLA edges i relativly bounded?
-        std::vector<GLANode> m_Nodes;
+        mutable std::vector<GLANode> m_Nodes;
         NonTerminalIndex m_NonTerminalCount = 0;
         TerminalIndex m_TerminalCount = 0;
         //std::vector<NodeIndex> m_ProductionBegin;
 
-        std::vector<bool> p_LOOK(GLANode& Edge,int k);
+        std::vector<bool> p_LOOK(GLANode& Edge,int k) const;
     public:
         GLA(MBCCDefinitions const& Grammar,int k);
         //TODO optimize, currently exponential time algorithm
-        MBMath::MBDynamicMatrix<bool> LOOK(NonTerminalIndex NonTerminal,int ProductionIndex,int k);
+        MBMath::MBDynamicMatrix<bool> LOOK(NonTerminalIndex NonTerminal,int ProductionIndex,int k) const;
         //Used for A* components
         //MBMath::MBDynamicMatrix<bool> FIRST(NonTerminalIndex NonTerminal,int k);
         //BoolTensor CalculateFIRST();
@@ -247,6 +247,7 @@ namespace MBCC
         CPPStreamIndenter(MBUtility::MBOctetOutputStream* StreamToConvert);
         size_t Write(const void* DataToWrite,size_t DataSize) override;
     };
+    std::vector<bool> CalculateENonTerminals(MBCCDefinitions const& Grammar);
     class LLParserGenerator
     {
         static std::vector<bool> p_RetrieveENonTerminals(MBCCDefinitions const& Grammar);
@@ -273,6 +274,9 @@ namespace MBCC
         //Could possibly cache result
         //-1 to specify full look
     public:
+        static void VerifyNotLeftRecursive(MBCCDefinitions const& Grammar,std::vector<bool> const& ERules);
+        static std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> CalculateProductionsLinearApproxLOOK(MBCCDefinitions const& Grammar,std::vector<bool> const& ERules,GLA const& GrammarGLA,int k);
+        static std::string Verify(MBCCDefinitions const& InfoToWrite);
         void WriteLLParser(MBCCDefinitions const& InfoToWrite,std::string const& HeaderName,MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut,int k = 2);
     };
 }

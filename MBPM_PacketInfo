@@ -1,5 +1,6 @@
 {
 	"PacketName":"MBCC",
 	"Attributes":[],
-	"Dependancies":["MBParsing","MBCLI"]
+	"Dependancies":["MBParsing","MBCLI"],
+    "SubPackets":["/Doc"]
 }

@@ -1,0 +1,86 @@
+%title CLI
+
+This document describes the command line interface for the project. 
+Reading both about the @[parser specification format](MBBNF.mbd) and 
+the semantics of the @[backends](Backends.mbd) is most likely needed in order to
+understand what the commands are doing.
+
+# Overview
+
+    Invoking MBCC takes takes on 2 distinct forms, commands calculating
+    information about a grammar/parser specification, and commands that are
+    actually outputting the parser.
+
+    There are however a couple of options that are common between these 2 modes.
+
+    All invocations require a @[parser specification file](MBBNF.mbd) to
+    operate, and is provided as the first argument. 
+
+    Options that specify @[the type of parser](#Parser type options) are also
+    common, as they determine which kind of checks that should be made, aswell
+    as what kind of parser to create.
+
+# Parser type options
+
+    These options determine the properties of the outputted parser 
+
+    _# Argument options
+
+        # k
+
+            Specifies how many tokens of lookahead that should be used when
+            creating a deterministic parser with fixed lookahead. The default
+            value is 1.
+
+            Providing a string that can't be parsed as an positive integer
+            terminates the program with a failing exit status, and no files are
+            modified.
+
+    /#
+
+# Invocations
+
+    The invocations are separated by the inclusion of the "verify" flag. If this
+    flag is included, only verification is performed, and no output files need
+    to be provided. It also enables the inclusion of 
+    @[verification options](#Verification options), which determine which kind
+    of checks should be performed. The exclusion of this flag instead invokes
+    the creation step, where verification options become invalid.
+
+    _# Verification
+        
+        [[Usage]]
+        mbcc --verify {ParseSpecificationFile} <Parser type options>*
+        <Verification options>*
+
+    /#
+
+    _# Creation
+
+        [[Usage]]
+        mbcc {ParseSpecificationFile} <Parser type options>* -h:{OutHeader}
+        -s:{OutSorce} -t:{TargetLangauge=c++}
+
+
+        The exclusion of either the header,source, or parser specification file
+        or and invalid target language terminates the program with a failing
+        exit status, and no files are modified. 
+
+        A invalid @[parse specification](MBBNF.mbd) also terminates the program
+        with a fatal error, and no files are modified.
+
+        If all files are provided, the program not being able to open the
+        output files for writing or the parser specification file for reading
+        also terminates the program with a fatal error.
+
+        The grammar is then verified with the @[default checks](#Default checks)
+        that are appropriate for the parser 
+        as specified by the @[parser type options](#Parser type options). 
+        If the provided parser specification fails any of these checks, so is
+        the program terminated with a fatal error and no output files are
+        modified.
+
+        After all of the previous mentioned steps are executed, the output files
+        are opened, and the parser is written.
+
+    /#
