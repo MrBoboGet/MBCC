@@ -1,6 +1,8 @@
 /MBPM_Builds/
 /MBPM_BuildFiles/
 /.*
+*.swp
+/*/.*
 /out
 /compile_commands.json
 /MBPM_FileInfo
