@@ -17,7 +17,8 @@ namespace MBCC
                 for(int i = 0; i < LookaheadInfo.NumberOfColumns();i++)
                 {
                     std::cout<<"Level "<<std::to_string(i+1)<<":"<<std::endl;
-                    for(int j = 0; j < LookaheadInfo.NumberOfRows();j++)
+                    //EOF is encoded as TerminalCount+1
+                    for(int j = 0; j < Grammar.Terminals.size();j++)
                     {
                         if(LookaheadInfo(j,i))
                         {

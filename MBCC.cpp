@@ -776,7 +776,7 @@ struct Hej1 : Hej2
                     else
                     {
                         //Position to start of non terminal
-                        m_Nodes[RuleOffset].Edges.push_back(GLAEdge(-1,i));
+                        m_Nodes[RuleOffset].Edges.push_back(GLAEdge(-1,Component.ComponentIndex));
                         //Terminal to position in parsing state
                         m_Nodes[Grammar.NonTerminals.size()+Component.ComponentIndex].Edges.push_back(GLAEdge(-1,RuleOffset+1));
 
@@ -793,7 +793,7 @@ struct Hej1 : Hej2
                     }
                     RuleOffset++;
                 }
-                m_Nodes[RuleOffset].Edges.push_back(GLAEdge(-1,Grammar.NonTerminals.size()+i));
+                m_Nodes[RuleOffset].Edges.push_back(GLAEdge(Grammar.NonTerminals.size(),Grammar.NonTerminals.size()+i));
                 RuleOffset++;
             }
         }
@@ -808,7 +808,7 @@ struct Hej1 : Hej2
     //NOTE exponential time implementation
     std::vector<bool> GLA::p_LOOK(GLANode& Node,int k) const
     {
-        std::vector<bool> ReturnValue = std::vector<bool>(m_TerminalCount);
+        std::vector<bool> ReturnValue = std::vector<bool>(m_TerminalCount+1,false);
         if(k == -1)
         {
             return(ReturnValue);   
@@ -825,6 +825,13 @@ struct Hej1 : Hej2
                 if(k == 0)
                 {
                     ReturnValue[Edge.ConnectionTerminal] = true;
+                    //EOF marker, special in that it both counts as a terminal
+                    //and should continue the search
+                    if(Edge.ConnectionTerminal == m_TerminalCount+1)
+                    {
+                        std::vector<bool> SubValues = p_LOOK(m_Nodes[Edge.Connection],0);
+                        h_Combine(ReturnValue,SubValues);
+                    }
                 }   
                 else
                 {
@@ -843,13 +850,13 @@ struct Hej1 : Hej2
     }
     MBMath::MBDynamicMatrix<bool> GLA::LOOK(NonTerminalIndex NonTerminal,int ProductionIndex,int k) const
     {
-        MBMath::MBDynamicMatrix<bool> ReturnValue(m_TerminalCount,k);
+        MBMath::MBDynamicMatrix<bool> ReturnValue(m_TerminalCount+1,k);
         auto& Node = m_Nodes[m_Nodes[NonTerminal].Edges[ProductionIndex].Connection];
         for(int i = 0; i < k;i++)
         {
             MBMath::MBDynamicMatrix<bool> Visited(k,m_Nodes.size());
             std::vector<bool> CurrentLook = p_LOOK(Node,i);
-            for(int j = 0; j < m_TerminalCount;j++)
+            for(int j = 0; j < m_TerminalCount+1;j++)
             {
                 ReturnValue(j,i) = CurrentLook[j];
             }
@@ -867,6 +874,7 @@ struct Hej1 : Hej2
     Token Tokenizer::p_ExtractToken() 
     {
         Token ReturnValue;
+        ReturnValue.Type = m_TerminalRegexes.size()+1;
         if(m_ParseOffset == m_TextData.size())
         {
             return(ReturnValue);
@@ -893,7 +901,7 @@ struct Hej1 : Hej2
                 break;
             }
         }     
-        if(ReturnValue.Type == -1)
+        if(ReturnValue.Type == m_TerminalRegexes.size()+1)
         {
             throw std::runtime_error("Invalid character sequence: no terminal matching input at byte offset "+std::to_string(m_ParseOffset));   
         }
@@ -996,19 +1004,20 @@ struct Hej1 : Hej2
             {
                 if(Component.IsTerminal)
                 {
-                    return;
+                    break;
                 }
-                p_VerifyNonTerminalLeftRecursive(CurrentIndex,VisitedTerminals,ERules,Grammar);
+                p_VerifyNonTerminalLeftRecursive(Component.ComponentIndex,VisitedTerminals,ERules,Grammar);
                 if(!(Component.Min == 0 || ERules[Component.ComponentIndex]))
                 {
                     break; 
                 }
             }  
         }
+        VisitedTerminals[CurrentIndex] = false;
     }
     void LLParserGenerator::VerifyNotLeftRecursive(MBCCDefinitions const& Grammar,std::vector<bool> const& ERules)
     {
-        return(p_VerifyNotLeftRecursive(Grammar,ERules)); 
+        p_VerifyNotLeftRecursive(Grammar,ERules);
     }
     void LLParserGenerator::p_VerifyNotLeftRecursive(MBCCDefinitions const& Grammar,std::vector<bool> const& ERules)
     {
@@ -1016,7 +1025,7 @@ struct Hej1 : Hej2
         {
             std::vector<bool> VisitedTerminals = std::vector<bool>(Grammar.NonTerminals.size(),false);
             p_VerifyNonTerminalLeftRecursive(i,VisitedTerminals,ERules,Grammar);
-        }    
+        }
     }
     BoolTensor::BoolTensor(int i,int j,int k)
     {
@@ -1366,6 +1375,8 @@ struct Hej1 : Hej2
         }
         return(ReturnValue);
     }
+    //Probably the only function that needs to know about the special property that the look for all terminals are one greater than the 
+    //number of non terminals, the last representing the EOF
     void LLParserGenerator::p_WriteLOOKTable(std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,MBUtility::MBOctetOutputStream& SourceOut)
     {
 

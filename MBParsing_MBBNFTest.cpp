@@ -62,7 +62,7 @@ void PrintResult(MBCC::MBCCDefinitions const& DataToPrint)
 }
 int main(int argc, char** argv)
 {
-    std::string FileToReadFrom = "ObjectSpec_BNF.mbnf";
+    std::string FileToReadFrom = "../../../MBObjectSpec/ObjectSpec_BNF.mbnf";
     if(argc == 2)
     {
         FileToReadFrom = argv[1];    
