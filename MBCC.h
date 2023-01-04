@@ -9,6 +9,7 @@
 #include <regex>
 #include <deque>
 #include <MBUtility/MBMatrix.h>
+#include <set>
 namespace MBCC
 {
     class MemberVariable
@@ -91,9 +92,9 @@ namespace MBCC
         std::string Name; 
         std::string ParentStruct;
         std::vector<StructMemberVariable> MemberVariables;
-        bool HasMember(std::string const& MemberToCheck) const;
-        StructMemberVariable const& GetMember(std::string const& MemberName) const;
-        StructMemberVariable& GetMember(std::string const& MemberName);
+        //bool HasMember(std::string const& MemberToCheck) const;
+        //StructMemberVariable const& GetMember(std::string const& MemberName) const;
+        //StructMemberVariable& GetMember(std::string const& MemberName);
     };
     typedef int RuleIndex;
     //-1 reserved for the empty word / end of file
@@ -132,6 +133,12 @@ namespace MBCC
         TerminalIndex Type = -1;
         std::string Value;    
     };
+    struct DependancyInfo
+    {
+        std::vector<StructIndex> StructureDependancyOrder; 
+        //Would it be faster to use a matrix?
+        std::vector<std::set<StructIndex>> ChildrenMap;
+    };
     class MBCCDefinitions
     {
     private:
@@ -145,6 +152,8 @@ namespace MBCC
         static StructMemberVariable p_ParseMemberVariable(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
         static StructDefinition p_ParseStruct(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
         static std::vector<ParseRule> p_ParseParseRules(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
+
+        bool p_IsAssignable(StructIndex Lhs,StructIndex Rhs);
     public:
         std::vector<Terminal> Terminals;
         std::vector<NonTerminal> NonTerminals;
@@ -153,12 +162,19 @@ namespace MBCC
         std::unordered_map<std::string,TerminalIndex> NameToTerminal;
         std::unordered_map<std::string,StructIndex> NameToStruct;
         
+        DependancyInfo DepInfo; 
+        
         std::string SkipRegex;
         NonTerminalIndex Start = -1;
 
         static MBCCDefinitions ParseDefinitions(const char* Data,size_t DataSize,size_t ParseOffset);
         static MBCCDefinitions ParseDefinitions(const char* Data,size_t DataSize,size_t ParseOffset,std::string& OutError);
+
+        bool HasMember(StructDefinition const& StructDef,std::string const& Member);
+        StructMemberVariable const& GetMember(StructDefinition const& StructDef,std::string const& Member) const;
+        StructMemberVariable& GetMember(StructDefinition& StructDef,std::string const& Member);
     };
+    DependancyInfo CalculateDependancyInfo(MBCCDefinitions const& Grammar);
     //Missing entry can be deduced by the bool being false
     class TerminalStringMap
     {

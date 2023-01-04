@@ -70,39 +70,39 @@ namespace MBCC
     //END StructMemberVariable
 
     //BEGIN StructDefinition
-    bool StructDefinition::HasMember(std::string const& MemberToCheck) const
-    {
-        for(auto const& Member : MemberVariables)
-        {
-            if(Member.GetName() == MemberToCheck)
-            {
-                return(true);  
-            } 
-        }       
-        return(false);
-    }
-    StructMemberVariable const& StructDefinition::GetMember(std::string const& MemberName) const
-    {
-        for(auto const& Member : MemberVariables)
-        {
-            if(Member.GetName() == MemberName)
-            {
-                return(Member);
-            } 
-        }       
-        throw std::runtime_error("no member exists with name "+MemberName);
-    }
-    StructMemberVariable& StructDefinition::GetMember(std::string const& MemberName)
-    {
-        for(auto& Member : MemberVariables)
-        {
-            if(Member.GetName() == MemberName)
-            {
-                return(Member);  
-            } 
-        }       
-        throw std::runtime_error("no member exists with name "+MemberName);
-    }
+    //bool StructDefinition::HasMember(std::string const& MemberToCheck) const
+    //{
+    //    for(auto const& Member : MemberVariables)
+    //    {
+    //        if(Member.GetName() == MemberToCheck)
+    //        {
+    //            return(true);  
+    //        } 
+    //    }       
+    //    return(false);
+    //}
+    //StructMemberVariable const& StructDefinition::GetMember(std::string const& MemberName) const
+    //{
+    //    for(auto const& Member : MemberVariables)
+    //    {
+    //        if(Member.GetName() == MemberName)
+    //        {
+    //            return(Member);
+    //        } 
+    //    }       
+    //    throw std::runtime_error("no member exists with name "+MemberName);
+    //}
+    //StructMemberVariable& StructDefinition::GetMember(std::string const& MemberName)
+    //{
+    //    for(auto& Member : MemberVariables)
+    //    {
+    //        if(Member.GetName() == MemberName)
+    //        {
+    //            return(Member);  
+    //        } 
+    //    }       
+    //    throw std::runtime_error("no member exists with name "+MemberName);
+    //}
     //END StructDefinition
     class MBCCParseError : public std::exception
     {
@@ -426,7 +426,7 @@ struct Hej1 : Hej2
         for(auto& Struct : Structs)
         {
             //Verify that the parent struct actually exists    
-            if(Struct.ParentStruct != "" && NameToStruct.find(Struct.Name) == NameToStruct.find(Struct.Name))
+            if(Struct.ParentStruct != "" && NameToStruct.find(Struct.Name) == NameToStruct.end())
             {
                 throw std::runtime_error("Semantic error parsing MBCC definitions: struct named \""+Struct.Name+"\" is the child of a non existing struct named \""+Struct.ParentStruct+"\"");
             } 
@@ -478,6 +478,79 @@ struct Hej1 : Hej2
                 }
             }
         }
+        DepInfo = CalculateDependancyInfo(*this);
+    }
+    //Assumption: Structs are valid
+    bool MBCCDefinitions::HasMember(StructDefinition const& StructDef,std::string const& MemberName)
+    {
+        bool ReturnValue = false;
+        for(auto const& Member : StructDef.MemberVariables)
+        {
+            if(Member.GetName() == MemberName)
+            {
+                ReturnValue = true;
+                break;
+            }
+        }       
+        if(!ReturnValue && StructDef.ParentStruct != "")
+        {
+            assert(NameToStruct.find(StructDef.ParentStruct) != NameToStruct.end());
+            ReturnValue = HasMember(Structs[NameToStruct[StructDef.ParentStruct]],MemberName);
+        }
+        return(ReturnValue);
+    }
+    StructMemberVariable const& MBCCDefinitions::GetMember(StructDefinition const& StructDef,std::string const& MemberName) const
+    {
+        for(auto const& Member : StructDef.MemberVariables)
+        {
+            if(Member.GetName() == MemberName)
+            {
+                return(Member);
+            }
+        }       
+        if(StructDef.ParentStruct == "")
+        {
+            throw std::runtime_error("Internal error verifying MBCC definitions: Structdefinition has no member with name \""+MemberName+"\"");   
+        }
+        assert(NameToStruct.find(StructDef.ParentStruct) != NameToStruct.end());
+        return(GetMember(Structs[NameToStruct.at(StructDef.ParentStruct)],MemberName));
+    }
+    StructMemberVariable& MBCCDefinitions::GetMember(StructDefinition& StructDef,std::string const& MemberName)
+    {
+        for(auto& Member : StructDef.MemberVariables)
+        {
+            if(Member.GetName() == MemberName)
+            {
+                return(Member);
+            }
+        }       
+        if(StructDef.ParentStruct == "")
+        {
+            throw std::runtime_error("Internal error verifying MBCC definitions: Structdefinition has no member with name \""+MemberName+"\"");   
+        }
+        assert(NameToStruct.find(StructDef.ParentStruct) != NameToStruct.end());
+        return(GetMember(Structs[NameToStruct[StructDef.ParentStruct]],MemberName));
+    }
+    //Assumption: Lhs and Rhs are valid struct indexes
+    //Assumption: Only single Inheritance is supported
+    bool MBCCDefinitions::p_IsAssignable(StructIndex Lhs,StructIndex Rhs)
+    {
+        bool ReturnValue = false;
+        StructIndex CurrentIndex = Rhs;
+        while(true)
+        {
+            if(CurrentIndex == Lhs)
+            {
+                ReturnValue = true;
+                break;   
+            }
+            if(Structs[CurrentIndex].ParentStruct == "")
+            {
+                break;   
+            }
+            CurrentIndex = NameToStruct[Structs[CurrentIndex].ParentStruct];
+        }
+        return(ReturnValue);       
     }
     void MBCCDefinitions::p_VerifyRules()
     {
@@ -514,14 +587,41 @@ struct Hej1 : Hej2
                         {
                             continue;   
                         }
-                        if(!AssociatedStruct->HasMember(Component.AssignedMember))
+                        if(Component.AssignedMember == "this")
+                        {
+                            if(Component.IsTerminal)
+                            {
+                                throw std::runtime_error("Semantic error parsing MBCC definitions: "
+                                     "Error in member assignment for non-terminal \""+NonTerminal.Name+"\": "
+                                     "Cannot assign terminal to this");
+                            }
+                            if(Component.Min != 1 || Component.Max != 1)
+                            {
+                                throw std::runtime_error("Semantic error parsing MBCC definitions: "
+                                        "Error in member assignment for non-terminal \""+NonTerminal.Name+"\": "
+                                        "Can only assign to this with terminal of exactly size 1");
+                            }
+                            //if(NonTerminal.AssociatedStruct != NonTerminals[Component.ComponentIndex].AssociatedStruct)
+                            if(!p_IsAssignable(NonTerminal.AssociatedStruct,NonTerminals[Component.ComponentIndex].AssociatedStruct))
+                            {
+                                throw std::runtime_error("Semantic error parsing MBCC definitions: "
+                                        "error in member assignment for non-terminal \""+NonTerminal.Name+"\": "
+                                        "error assigning non-terminal \""+Component.ReferencedRule+"\" to this: "+
+                                        "non-terminal has type \""+Structs[NonTerminal.AssociatedStruct].Name+"\" but"
+                                        " assigned non-terminal is of type \""+Structs[NonTerminals[Component.ComponentIndex].AssociatedStruct].Name+"\"");
+
+                            }
+                            continue;
+                        }
+                        //if(!AssociatedStruct->HasMember(Component.AssignedMember))
+                        if(!HasMember(*AssociatedStruct,Component.AssignedMember))
                         {
                             throw std::runtime_error("Semantic error parsing MBCC definitions: "
                                     "rule \""+NonTerminal.Name+"\" referencing non existing member \""+Component.AssignedMember+"\" "
                                     "of struct \""+AssociatedStruct->Name+"\"");
                         }
                         //Check type of assigned member
-                        StructMemberVariable const& AssociatedMember = AssociatedStruct->GetMember(Component.AssignedMember); 
+                        StructMemberVariable const& AssociatedMember = GetMember(*AssociatedStruct,Component.AssignedMember);
                         if(AssociatedMember.IsType<StructMemberVariable_Struct>())
                         {
                             StructMemberVariable_Struct const& StructMember = AssociatedMember.GetType<StructMemberVariable_Struct>();  
@@ -534,13 +634,14 @@ struct Hej1 : Hej2
                             }
                             //Struct have already been verified
                             //structmember uses 
-                            if(NameToStruct[StructMember.StructType] != Component.ComponentIndex)
+                            //if(NameToStruct[StructMember.StructType] != NonTerminals[Component.ComponentIndex].AssociatedStruct)
+                            if(!p_IsAssignable(NameToStruct[StructMember.StructType],NonTerminals[Component.ComponentIndex].AssociatedStruct))
                             {
                                 throw std::runtime_error("Semantic error parsing MBCC definitions: "
                                         "error in member assignment for non-terminal \""+NonTerminal.Name+"\": "
                                         "error assigning non-terminal \""+Component.ReferencedRule+"\" to member \""+AssociatedMember.GetName()+"\": "+
-                                        " member is of type "+Structs[NameToStruct[StructMember.StructType]].Name +" "
-                                        "and non-terminal is of type "+Structs[Component.ComponentIndex].Name);
+                                        "member is of type "+Structs[NameToStruct[StructMember.StructType]].Name +" "
+                                        "and non-terminal is of type "+Structs[NonTerminals[Component.ComponentIndex].AssociatedStruct].Name);
                             }
                         }
                         else if(AssociatedMember.IsType<StructMemberVariable_List>())
@@ -555,13 +656,14 @@ struct Hej1 : Hej2
                             }
                             //Struct have already been verified
                             //structmember uses 
-                            if(NameToStruct[ListMember.ListType] != Component.ComponentIndex)
+                            //if(NameToStruct[ListMember.ListType] != NonTerminals[Component.ComponentIndex].AssociatedStruct)
+                            if(!p_IsAssignable(NameToStruct[ListMember.ListType],NonTerminals[Component.ComponentIndex].AssociatedStruct))
                             {
                                 throw std::runtime_error("Semantic error parsing MBCC definitions: "
                                         "error in member assignment for non-terminal \""+NonTerminal.Name+"\": "
                                         "error assigning non-terminal \""+Component.ReferencedRule+"\" to member \""+AssociatedMember.GetName()+"\": "+
                                         " member is of type "+Structs[NameToStruct[ListMember.ListType]].Name +" "
-                                        "and non-terminal is of type "+Structs[Component.ComponentIndex].Name);
+                                        "and non-terminal is of type "+Structs[NonTerminals[Component.ComponentIndex].AssociatedStruct].Name);
                             }
                         }
                         else if(AssociatedMember.IsType<StructMemberVariable_Int>())
@@ -1135,12 +1237,6 @@ struct Hej1 : Hej2
         p_WriteSource(Grammar,ProductionsLOOk,HeaderName,SourceOut); 
         p_WriteHeader(Grammar,HeaderOut);
     }
-    struct i_DependancyInfo
-    {
-        std::vector<StructIndex> StructureDependancyOrder; 
-        //Would it be faster to use a matrix?
-        std::vector<std::set<StructIndex>> ChildrenMap;
-    };
     int h_CalculateDepth(StructIndex CurrentStructIndex,std::vector<bool>& Busy,std::vector<int>& OutDependancyDepth,std::vector<std::set<StructIndex>> const& StructureDependancies)
     {
         int ReturnValue = OutDependancyDepth[CurrentStructIndex];
@@ -1200,9 +1296,9 @@ struct Hej1 : Hej2
         }
         return(ReturnValue);
     }
-    i_DependancyInfo h_CalculateDependancyInfo(MBCCDefinitions const& Grammar)
+    DependancyInfo CalculateDependancyInfo(MBCCDefinitions const& Grammar)
     {
-        i_DependancyInfo ReturnValue;           
+        DependancyInfo ReturnValue;           
         ReturnValue.StructureDependancyOrder = std::vector<StructIndex>(Grammar.Structs.size());
         ReturnValue.ChildrenMap = std::vector<std::set<StructIndex>>(Grammar.Structs.size());
         std::iota(ReturnValue.StructureDependancyOrder.begin(),ReturnValue.StructureDependancyOrder.end(),0);
@@ -1219,71 +1315,83 @@ struct Hej1 : Hej2
                 });
         return(ReturnValue);
     }
-    void h_WriteStructures(MBCCDefinitions const& Grammar,i_DependancyInfo const& DepInfo,MBUtility::MBOctetOutputStream& HeaderOut)
+    void h_WriteStructures(MBCCDefinitions const& Grammar,DependancyInfo const& DepInfo,MBUtility::MBOctetOutputStream& HeaderOut)
     {
+        std::vector<StructIndex> AbstractStructs;
         for(StructIndex CurrentIndex : DepInfo.StructureDependancyOrder)
         {
             StructDefinition const& CurrentStruct = Grammar.Structs[CurrentIndex];
-            HeaderOut << "class "<<CurrentStruct.Name;
+            std::string StructName = CurrentStruct.Name;
+            if(DepInfo.ChildrenMap[CurrentIndex].size() > 0)
+            {
+                StructName += "_Base";
+                AbstractStructs.push_back(CurrentIndex);
+            }
+            HeaderOut << "class "<<StructName;
             if(CurrentStruct.ParentStruct != "")
             {
                 HeaderOut<<" : public "<<CurrentStruct.ParentStruct;
+                if(DepInfo.ChildrenMap[Grammar.NameToStruct.at(CurrentStruct.ParentStruct)].size() > 0)
+                {
+                    HeaderOut<<"_Base";   
+                }
             }
             HeaderOut<<"\n{\n";
-            if(DepInfo.ChildrenMap[CurrentIndex].size() > 0)
+            HeaderOut<<"public:\n";
+            for(auto const& Member : CurrentStruct.MemberVariables)
             {
-                HeaderOut<<"private:\n std::unique_ptr<std::variant<";
-                std::string VariantMembers;
-                for(StructIndex ChildIndex : DepInfo.ChildrenMap[CurrentIndex])
+                if(Member.IsType<StructMemberVariable_Int>())
                 {
-                    VariantMembers += Grammar.Structs[ChildIndex].Name+",";
-                } 
-                VariantMembers.resize(VariantMembers.size()-1);
-                HeaderOut<<VariantMembers<<">> m_Data;\npublic:\n";
-                HeaderOut<<"template<typename T> Accept(T& Visitor)\n{\nstd::visit(Visitor,*m_Data);\n}\n";
-                HeaderOut<<"template<typename T> Accept(T const& Visitor) const\n{\nstd::visit(Visitor,*m_Data);\n}\n";
-                HeaderOut<<"template<typename T> "<<CurrentStruct.Name << "(T ObjectToStore)\n{\nm_Data = std::make_unique<std::variant<"<<VariantMembers<<">>(std::move(ObjectToStore));\n}\n";
-                HeaderOut<<CurrentStruct.Name << "() = default";
-                HeaderOut<<"template<typename T> IsType() const\n{\nstd::holds_alternative<T>(*m_Data);\n}\n";
-                HeaderOut<<"template<typename T> GetType() const\n{\nstd::get<T>(*m_Data);\n}\n";
-                HeaderOut<<"template<typename T> GetType()\n{\nstd::get<T>(*m_Data);\n}\n";
-            }  
-            else
-            {
-                HeaderOut<<"public:\n";
-                for(auto const& Member : CurrentStruct.MemberVariables)
+                    HeaderOut << "int ";     
+                }
+                else if(Member.IsType<StructMemberVariable_String>())
                 {
-                    if(Member.IsType<StructMemberVariable_Int>())
-                    {
-                        HeaderOut << "int ";     
-                    }
-                    else if(Member.IsType<StructMemberVariable_String>())
-                    {
-                        HeaderOut << "std::string ";   
-                    }
-                    else if(Member.IsType<StructMemberVariable_Struct>())
-                    {
-                        HeaderOut << Member.GetType<StructMemberVariable_Struct>().StructType<<" ";
-                    }
-                    else if(Member.IsType<StructMemberVariable_List>())
-                    {
-                        HeaderOut <<"std::vector<"<<Member.GetType<StructMemberVariable_List>().ListType<<"> ";
-                    }
-                    else if(Member.IsType<StructMemberVariable_Raw>())
-                    {
-                        HeaderOut << Member.GetType<StructMemberVariable_Raw>().RawMemberType<<" ";
-                    }
-                    HeaderOut<<Member.GetName();
-                    if(Member.GetDefaultValue() != "")
-                    {
-                        HeaderOut<<" = "<<Member.GetDefaultValue();   
-                    }
-                    HeaderOut <<";\n";
+                    HeaderOut << "std::string ";   
+                }
+                else if(Member.IsType<StructMemberVariable_Struct>())
+                {
+                    HeaderOut << Member.GetType<StructMemberVariable_Struct>().StructType<<" ";
+                }
+                else if(Member.IsType<StructMemberVariable_List>())
+                {
+                    HeaderOut <<"std::vector<"<<Member.GetType<StructMemberVariable_List>().ListType<<"> ";
+                }
+                else if(Member.IsType<StructMemberVariable_Raw>())
+                {
+                    HeaderOut << Member.GetType<StructMemberVariable_Raw>().RawMemberType<<" ";
+                }
+                HeaderOut<<Member.GetName();
+                if(Member.GetDefaultValue() != "")
+                {
+                    HeaderOut<<" = "<<Member.GetDefaultValue();   
+                }
+                HeaderOut <<";\n";
 
-                }         
-            }
+            }         
             HeaderOut<<"\n};\n";
         }        
+        for(StructIndex CurrentIndex : AbstractStructs)
+        {
+            std::string StructName = Grammar.Structs[CurrentIndex].Name;
+            HeaderOut << "class "<<StructName;
+            HeaderOut<<"\n{\n";
+            HeaderOut<<"private:\n std::unique_ptr<std::variant<";
+            std::string VariantMembers;
+            for(StructIndex ChildIndex : DepInfo.ChildrenMap[CurrentIndex])
+            {
+                VariantMembers += Grammar.Structs[ChildIndex].Name+",";
+            } 
+            VariantMembers.resize(VariantMembers.size()-1);
+            HeaderOut<<VariantMembers<<">> m_Data;\npublic:\n";
+            HeaderOut<<"template<typename T> void Accept(T& Visitor)\n{\nstd::visit(Visitor,*m_Data);\n}\n";
+            HeaderOut<<"template<typename T> void Accept(T const& Visitor) const\n{\nstd::visit(Visitor,*m_Data);\n}\n";
+            HeaderOut<<"template<typename T> "<<StructName << "(T ObjectToStore)\n{\nm_Data = std::make_unique<std::variant<"<<VariantMembers<<">>(std::move(ObjectToStore));\n}\n";
+            HeaderOut<<StructName << "() = default\n";
+            HeaderOut<<"template<typename T> bool IsType() const\n{\nstd::holds_alternative<T>(*m_Data);\n}\n";
+            HeaderOut<<"template<typename T> T const& GetType() const\n{\nstd::get<T>(*m_Data);\n}\n";
+            HeaderOut<<"template<typename T> T& GetType()\n{\nstd::get<T>(*m_Data);\n}\n";
+            HeaderOut<<"\n};\n";
+        }
     }
     void LLParserGenerator::p_WriteHeader(MBCCDefinitions const& Grammar, MBUtility::MBOctetOutputStream& HeaderOut)
     {
@@ -1293,7 +1401,9 @@ struct Hej1 : Hej2
         HeaderOut << "#include <string>\n";
         HeaderOut << "#include <vector>\n";
         HeaderOut << "#include <stdexcept>\n";
-        i_DependancyInfo DepInfo = h_CalculateDependancyInfo(Grammar); 
+        HeaderOut << "#include <variant>\n";
+        HeaderOut << "#include <memory>\n";
+        DependancyInfo DepInfo = Grammar.DepInfo;
         h_WriteStructures(Grammar,DepInfo,HeaderOut);
         p_WriteFunctionHeaders(Grammar,HeaderOut);
         HeaderOut<<"inline MBCC::Tokenizer GetTokenizer()\n{\nMBCC::Tokenizer ReturnValue(\""+Grammar.SkipRegex+"\",{"; 
@@ -1526,8 +1636,15 @@ struct Hej1 : Hej2
                         +"\");\n}\n");
                 if(Component.AssignedMember != "")
                 {
-                    MBUtility::WriteData(SourceOut,"ReturnValue."+Component.AssignedMember+"= ");
-                    StructMemberVariable const& Member = AssoicatedStruct->GetMember(Component.AssignedMember);
+                    if(Component.AssignedMember == "this")
+                    {
+                        SourceOut << "ReturnValue = ";
+                    }
+                    else
+                    {
+                        MBUtility::WriteData(SourceOut,"ReturnValue."+Component.AssignedMember+"= ");
+                    }
+                    StructMemberVariable const& Member = Grammar.GetMember(*AssoicatedStruct,Component.AssignedMember);
                     if(Member.IsType<StructMemberVariable_String>())
                     {
                         MBUtility::WriteData(SourceOut,"Tokenizer.Peek().Value;\n");
@@ -1545,7 +1662,14 @@ struct Hej1 : Hej2
                 {
                     if(Component.AssignedMember != "")
                     {
-                        MBUtility::WriteData(SourceOut,"ReturnValue."+Component.AssignedMember+"= "); 
+                        if(Component.AssignedMember == "this")
+                        {
+                            SourceOut << "ReturnValue = ";
+                        }
+                        else
+                        {
+                            MBUtility::WriteData(SourceOut,"ReturnValue."+Component.AssignedMember+"= "); 
+                        }
                     }
                     MBUtility::WriteData(SourceOut,"Parse"+Grammar.NonTerminals[Component.ComponentIndex].Name+"(Tokenizer);\n");
                 } 
@@ -1554,6 +1678,7 @@ struct Hej1 : Hej2
                     MBUtility::WriteData(SourceOut,"while("+p_GetLOOKPredicate(Component.ComponentIndex)+")\n{");
                     if(Component.AssignedMember != "")
                     {
+                        //NOTE: multi variable member cannot be assigned to this
                         MBUtility::WriteData(SourceOut,"ReturnValue."+Component.AssignedMember+".push_back("); 
                         MBUtility::WriteData(SourceOut,"Parse"+Grammar.NonTerminals[Component.ComponentIndex].Name+"(Tokenizer));\n}\n");
                     }
@@ -1567,6 +1692,7 @@ struct Hej1 : Hej2
                     MBUtility::WriteData(SourceOut,"if("+p_GetLOOKPredicate(Component.ComponentIndex)+")\n{");
                     if(Component.AssignedMember != "")
                     {
+                        //NOTE: multi variable member cannot be assigned to this
                         MBUtility::WriteData(SourceOut,"ReturnValue."+Component.AssignedMember+"= "); 
                     }
                     MBUtility::WriteData(SourceOut,"Parse"+Grammar.NonTerminals[Component.ComponentIndex].Name+"(Tokenizer);\n}\n");
