@@ -1369,29 +1369,50 @@ struct Hej1 : Hej2
 
             }         
             HeaderOut<<"\n};\n";
-        }        
-        for(StructIndex CurrentIndex : AbstractStructs)
-        {
-            std::string StructName = Grammar.Structs[CurrentIndex].Name;
-            HeaderOut << "class "<<StructName;
-            HeaderOut<<"\n{\n";
-            HeaderOut<<"private:\n std::unique_ptr<std::variant<";
-            std::string VariantMembers;
-            for(StructIndex ChildIndex : DepInfo.ChildrenMap[CurrentIndex])
+            //If abstract class, write the containe class
+            if(DepInfo.ChildrenMap[CurrentIndex].size() > 0)
             {
-                VariantMembers += Grammar.Structs[ChildIndex].Name+",";
-            } 
-            VariantMembers.resize(VariantMembers.size()-1);
-            HeaderOut<<VariantMembers<<">> m_Data;\npublic:\n";
-            HeaderOut<<"template<typename T> void Accept(T& Visitor)\n{\nstd::visit(Visitor,*m_Data);\n}\n";
-            HeaderOut<<"template<typename T> void Accept(T const& Visitor) const\n{\nstd::visit(Visitor,*m_Data);\n}\n";
-            HeaderOut<<"template<typename T> "<<StructName << "(T ObjectToStore)\n{\nm_Data = std::make_unique<std::variant<"<<VariantMembers<<">>(std::move(ObjectToStore));\n}\n";
-            HeaderOut<<StructName << "() = default\n";
-            HeaderOut<<"template<typename T> bool IsType() const\n{\nstd::holds_alternative<T>(*m_Data);\n}\n";
-            HeaderOut<<"template<typename T> T const& GetType() const\n{\nstd::get<T>(*m_Data);\n}\n";
-            HeaderOut<<"template<typename T> T& GetType()\n{\nstd::get<T>(*m_Data);\n}\n";
-            HeaderOut<<"\n};\n";
+                std::string ConcreteStructName = Grammar.Structs[CurrentIndex].Name;
+                HeaderOut << "class "<<ConcreteStructName;
+                HeaderOut<<"\n{\n";
+                HeaderOut<<"private:\n std::unique_ptr<"<<StructName<<"> m_Data;\nsize_t m_TypeID = 0;\n";
+                HeaderOut<<"template<typename T> static size_t p_GetTypeID(){return size_t(&p_GetTypeID<T>);}\n";
+                HeaderOut<<"public:\n";
+                HeaderOut<<"template<typename T> void Accept(T& Visitor);\n";
+                HeaderOut<<"template<typename T> void Accept(T& Visitor) const;\n";
+                HeaderOut<<"template<typename T> "<< ConcreteStructName<< "(T ObjectToStore)\n{\nm_Data = std::unique_ptr<"<<StructName<<">(new T(std::move(ObjectToStore)));\nm_TypeID = p_GetTypeID<T>();\n}\n";
+                HeaderOut<<ConcreteStructName << "() = default;\n";
+                HeaderOut<<ConcreteStructName << "("<<ConcreteStructName<<"&&) = default;\n";
+                HeaderOut<<"template<typename T> bool IsType() const\n{\nreturn m_TypeID == p_GetTypeID<T>();\n}\n";
+                HeaderOut<<"void operator=("<<ConcreteStructName<<"&& StructToMove)\n{\nstd::swap(m_TypeID,StructToMove.m_TypeID);\nstd::swap(m_Data,StructToMove.m_Data);\n}\n";
+                HeaderOut<<"template<typename T> T const& GetType() const\n{\nif(!IsType<T>())\n{\nthrow std::runtime_error(\"Invalid type access for abstract AST class\");\n}return static_cast<T const&>(*m_Data);\n}\n";
+                HeaderOut<<"template<typename T> T& GetType() const\n{\nif(!IsType<T>())\n{\nthrow std::runtime_error(\"Invalid type access for abstract AST class\");\n}return static_cast<T&>(*m_Data);\n}\n";
+                HeaderOut<<"\n};\n";
+            }
         }
+        for(auto const& AbstractStructIndex : AbstractStructs)
+        { 
+            HeaderOut<<"template<typename T> void "<< Grammar.Structs[AbstractStructIndex].Name<<"::"<< "Accept(T& Visitor)"; 
+            HeaderOut << "\n{\n";
+            for(StructIndex ChildStruct : DepInfo.ChildrenMap[AbstractStructIndex])
+            {
+                HeaderOut<< "if(p_GetTypeID<"+Grammar.Structs[ChildStruct].Name+">() == m_TypeID)\n{\nVisitor(static_cast<"+Grammar.Structs[ChildStruct].Name+"&>(*m_Data));\n}\n";
+                HeaderOut<< "else ";
+            }
+            HeaderOut<< "\n{\nthrow std::runtime_error(\"Invalid object stored in AST abstract class\");\n}\n";
+            HeaderOut<< "\n}\n";
+
+
+            HeaderOut<<"template<typename T> void "<< Grammar.Structs[AbstractStructIndex].Name<<"::"<< "Accept(T& Visitor) const"; 
+            HeaderOut << "\n{\n";
+            for(StructIndex ChildStruct : DepInfo.ChildrenMap[AbstractStructIndex])
+            {
+                HeaderOut<< "if(p_GetTypeID<"+Grammar.Structs[ChildStruct].Name+">() == m_TypeID)\n{\nVisitor(static_cast<"+Grammar.Structs[ChildStruct].Name+" const&>(*m_Data));\n}\n";
+                HeaderOut<< "else ";
+            }
+            HeaderOut<< "\n{\nthrow std::runtime_error(\"Invalid object stored in AST abstract class\");\n}\n";
+            HeaderOut<< "\n}\n";
+        } 
     }
     void LLParserGenerator::p_WriteHeader(MBCCDefinitions const& Grammar, MBUtility::MBOctetOutputStream& HeaderOut)
     {
