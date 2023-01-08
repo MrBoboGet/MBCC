@@ -35,6 +35,11 @@ namespace MBCC
     {
            
     }
+    StructMemberVariable::StructMemberVariable(StructMemberVariable_Bool StructMemberVariable)
+        : m_Content(std::move(StructMemberVariable))
+    {
+           
+    }
     std::string& StructMemberVariable::GetName()
     {
         return(std::visit([&](MemberVariable& x) -> std::string& 
@@ -419,7 +424,7 @@ struct Hej1 : Hej2
     }
     bool h_TypeIsBuiltin(std::string const& TypeToVerify)
     {
-        return(TypeToVerify == "String" || TypeToVerify == "Int");
+        return(TypeToVerify == "String" || TypeToVerify == "Int" || TypeToVerify == "Bool");
     }
     void MBCCDefinitions::p_VerifyStructs()
     {
@@ -468,6 +473,30 @@ struct Hej1 : Hej2
                             NewMember.Name = MemberVariable.GetName();
                             MemberVariable = StructMemberVariable(NewMember);
                                
+                        }
+                        else if(StructMember.StructType == "Bool")
+                        {
+                            StructMemberVariable_Bool NewMember;   
+                            NewMember.DefaultValue = MemberVariable.GetDefaultValue();
+                            NewMember.Name = MemberVariable.GetName();
+                            if(NewMember.DefaultValue != "")
+                            {
+                                size_t Offset = 0;
+                                MBParsing::SkipWhitespace(NewMember.DefaultValue,0,&Offset);
+                                if(NewMember.DefaultValue.size() -Offset == 4 && std::memcmp(NewMember.DefaultValue.data()+Offset,"true",4) == 0)
+                                {
+                                    NewMember.Value = true;   
+                                }
+                                else if(NewMember.DefaultValue.size() -Offset == 5 && std::memcmp(NewMember.DefaultValue.data()+Offset,"false",5) == 0)
+                                {
+                                    NewMember.Value = false;   
+                                }
+                                else
+                                {
+                                    throw std::runtime_error("Semantic error parsing MBCC definitions: invalid default value for bool type: "+NewMember.DefaultValue);   
+                                }
+                            }
+                            MemberVariable = StructMemberVariable(NewMember);
                         }
                     }
                     else if(NameToStruct.find(MemberVariable.GetType<StructMemberVariable_Struct>().StructType) == NameToStruct.end())
@@ -666,16 +695,7 @@ struct Hej1 : Hej2
                                         "and non-terminal is of type "+Structs[NonTerminals[Component.ComponentIndex].AssociatedStruct].Name);
                             }
                         }
-                        else if(AssociatedMember.IsType<StructMemberVariable_Int>())
-                        {
-                            if(Component.IsTerminal == false)
-                            {
-                                throw std::runtime_error("Semantic error parsing MBCC definitions: "
-                                        "error with member assignment in non-terminal \""+NonTerminal.Name+"\": "
-                                        "only a terminal can be assigned to builtin scalar types");
-                            }     
-                        }
-                        else if(AssociatedMember.IsType<StructMemberVariable_String>())
+                        else
                         {
                             if(Component.IsTerminal == false)
                             {
@@ -1352,6 +1372,10 @@ struct Hej1 : Hej2
                 {
                     HeaderOut << Member.GetType<StructMemberVariable_Struct>().StructType<<" ";
                 }
+                else if(Member.IsType<StructMemberVariable_Bool>())
+                {
+                    HeaderOut << "bool ";
+                }
                 else if(Member.IsType<StructMemberVariable_List>())
                 {
                     HeaderOut <<"std::vector<"<<Member.GetType<StructMemberVariable_List>().ListType<<"> ";
@@ -1385,8 +1409,10 @@ struct Hej1 : Hej2
                 HeaderOut<<ConcreteStructName << "("<<ConcreteStructName<<"&&) = default;\n";
                 HeaderOut<<"template<typename T> bool IsType() const\n{\nreturn m_TypeID == p_GetTypeID<T>();\n}\n";
                 HeaderOut<<"void operator=("<<ConcreteStructName<<"&& StructToMove)\n{\nstd::swap(m_TypeID,StructToMove.m_TypeID);\nstd::swap(m_Data,StructToMove.m_Data);\n}\n";
-                HeaderOut<<"template<typename T> T const& GetType() const\n{\nif(!IsType<T>())\n{\nthrow std::runtime_error(\"Invalid type access for abstract AST class\");\n}return static_cast<T const&>(*m_Data);\n}\n";
-                HeaderOut<<"template<typename T> T& GetType() const\n{\nif(!IsType<T>())\n{\nthrow std::runtime_error(\"Invalid type access for abstract AST class\");\n}return static_cast<T&>(*m_Data);\n}\n";
+                HeaderOut<<"template<typename T> T const& GetType() const\n{\nif(!IsType<T>() || m_Data == nullptr)\n{\nthrow std::runtime_error(\"Invalid type access for abstract AST class\");\n}return static_cast<T const&>(*m_Data);\n}\n";
+                HeaderOut<<"template<typename T> T& GetType()\n{\nif(!IsType<T>() || m_Data == nullptr)\n{\nthrow std::runtime_error(\"Invalid type access for abstract AST class\");\n}return static_cast<T&>(*m_Data);\n}\n";
+                HeaderOut<<StructName<<"& GetBase()\n{\nif(m_Data == nullptr)\n{\nthrow std::runtime_error(\"Invalid type access for abstract AST class: data is null\");\n}return static_cast<"<< StructName<<"&>(*m_Data);\n}\n";
+                HeaderOut<<StructName<<" const& GetBase() const\n{\nif(m_Data == nullptr)\n{\nthrow std::runtime_error(\"Invalid type access for abstract AST class: data is null\");\n}return static_cast<"<< StructName<<" const&>(*m_Data);\n}\n";
                 HeaderOut<<"\n};\n";
             }
         }
@@ -1413,6 +1439,16 @@ struct Hej1 : Hej2
             HeaderOut<< "\n{\nthrow std::runtime_error(\"Invalid object stored in AST abstract class\");\n}\n";
             HeaderOut<< "\n}\n";
         } 
+        //Write traverser
+        //HeaderOut<<"template<typename T> class Traverser\n{\nprotected:\nT* m_Traveler = nullptr;";
+        //for(StructIndex CurrentStructIndex = 0; CurrentStructIndex < Grammar.Structs.size();CurrentStructIndex++)
+        //{
+        //    auto const& CurrentStruct = Grammar.Structs[CurrentStructIndex];
+        //    HeaderOut<<"void operator("+CurrentStruct.Name+" const&)\n{\n";
+        //}
+        //HeaderOut<<"public:\n";
+        //HeaderOut<<"template<typename A> void Traverse(T& Traveler,A& AST)\n{\nm_Traveler = &Traveler;\n(*this)(AST);\n}\n";
+
     }
     void LLParserGenerator::p_WriteHeader(MBCCDefinitions const& Grammar, MBUtility::MBOctetOutputStream& HeaderOut)
     {
@@ -1673,6 +1709,10 @@ struct Hej1 : Hej2
                     else if(Member.IsType<StructMemberVariable_Int>())
                     {
                         MBUtility::WriteData(SourceOut,"std::stoi(Tokenizer.Peek().Value);\n");
+                    }
+                    else if(Member.IsType<StructMemberVariable_Bool>())
+                    {
+                        MBUtility::WriteData(SourceOut,"Tokenizer.Peek().Value == \"true\"");
                     }
                 } 
                 MBUtility::WriteData(SourceOut,"Tokenizer.ConsumeToken();\n");

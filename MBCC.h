@@ -36,7 +36,12 @@ namespace MBCC
     class StructMemberVariable_Int : public MemberVariable
     {
     public:
-        int Value;
+        int Value = 0;
+    };
+    class StructMemberVariable_Bool : public MemberVariable
+    {
+    public:
+        bool Value = false;
     };
     class StructMemberVariable_String : public MemberVariable
     {
@@ -48,7 +53,8 @@ namespace MBCC
     class MemberVariableVisitor;
     class StructMemberVariable
     {
-        std::variant<StructMemberVariable_Raw,StructMemberVariable_List,StructMemberVariable_Struct,StructMemberVariable_Int,StructMemberVariable_String> 
+        std::variant<StructMemberVariable_Raw,StructMemberVariable_List,StructMemberVariable_Struct,StructMemberVariable_Int,StructMemberVariable_String,
+            StructMemberVariable_Bool> 
             m_Content;
     public:
         StructMemberVariable() = default;
@@ -56,6 +62,7 @@ namespace MBCC
         StructMemberVariable(StructMemberVariable_Raw RawMemberVariable);
         StructMemberVariable(StructMemberVariable_Struct StructMemberVariable);
         StructMemberVariable(StructMemberVariable_Int RawMemberVariable);
+        StructMemberVariable(StructMemberVariable_Bool RawMemberVariable);
         StructMemberVariable(StructMemberVariable_String StructMemberVariable);
         std::string& GetName();
         std::string& GetDefaultValue();
@@ -85,6 +92,7 @@ namespace MBCC
         void Visit(StructMemberVariable_List const& List){};
         void Visit(StructMemberVariable_Struct const& Struct){};
         void Visit(StructMemberVariable_Int const& Int){};
+        void Visit(StructMemberVariable_Bool const& Int){};
         void Visit(StructMemberVariable_String const& String){};
     };
     struct StructDefinition
