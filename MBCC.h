@@ -121,9 +121,15 @@ namespace MBCC
         //can either be a RuleIndex, or a TerminalIndex depending
         ParseIndex ComponentIndex = 0;
     };
+    //TODO fix so that semantic actions doesn't just just use textual insertion
+    struct SemanticAction
+    {
+        std::string ActionString;      
+    };
     struct ParseRule
     {
         std::vector<RuleComponent> Components;
+        std::vector<SemanticAction> Actions;
     };
     struct Terminal
     {
@@ -155,6 +161,7 @@ namespace MBCC
         void p_UpdateReferencesAndVerify();
 
         static std::string p_ParseIdentifier(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
+        static SemanticAction p_ParseSemanticAction(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
         static Terminal p_ParseTerminal(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
         static std::pair<std::string,std::string> p_ParseDef(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
         static StructMemberVariable p_ParseMemberVariable(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);

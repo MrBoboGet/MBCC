@@ -342,6 +342,25 @@ struct Hej1 : Hej2
         ReturnValue.second = StructName;
         return(ReturnValue);
     }
+    SemanticAction MBCCDefinitions::p_ParseSemanticAction(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset)
+    {
+        SemanticAction ReturnValue;
+        size_t ParseOffset = InParseOffset;
+        if(Data[ParseOffset] != '{')
+        {
+            throw MBCCParseError("Syntactic error parsing MBCC definitions: { must begin semantic action",ParseOffset);  
+        } 
+        ParseOffset+=1;
+        size_t ActionEnd = std::find(Data+ParseOffset,Data+DataSize,'}')-Data;
+        if(ActionEnd == DataSize)
+        {
+            throw MBCCParseError("Syntactic error parsing MBCC definitions: no delimiting } for semantic action",ParseOffset);
+        }
+        ReturnValue.ActionString = std::string(Data+ParseOffset,Data+ActionEnd);
+        ParseOffset = ActionEnd+1;
+        *OutParseOffset = ParseOffset;     
+        return ReturnValue;       
+    }
     std::vector<ParseRule> MBCCDefinitions::p_ParseParseRules(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset)
     {
         std::vector<ParseRule> ReturnValue;
@@ -357,6 +376,12 @@ struct Hej1 : Hej2
         while(ParseOffset < DataSize)
         {
             //does allow for empty rules, s
+            if(Data[ParseOffset] == '{')
+            {
+                CurrentRule.Actions.push_back(p_ParseSemanticAction(Data,DataSize,ParseOffset,&ParseOffset));
+                MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
+                continue;
+            }
             if(Data[ParseOffset] == '|')
             {
                 if(CurrentRule.Components.size() == 0)
@@ -418,6 +443,10 @@ struct Hej1 : Hej2
         if(CurrentRule.Components.size() != 0)
         {
             ReturnValue.push_back(std::move(CurrentRule));   
+        }
+        if(ReturnValue.size() == 0)
+        {
+            throw MBCCParseError("Syntactic error parsing MBCC definitions: empty rule",ParseOffset);   
         }
         *OutParseOffset = ParseOffset;
         return(ReturnValue);
@@ -1763,6 +1792,10 @@ struct Hej1 : Hej2
                     assert(false && "Min can only be 0 or 1, max can only be 1 or -1");
                 }
             }
+        }
+        for(auto const& Action : Grammar.NonTerminals[NonTermIndex].Rules[ProductionIndex].Actions)
+        {
+            SourceOut<<Action.ActionString<<"\n";
         }
         MBUtility::WriteData(SourceOut,"return(ReturnValue);\n}\n");
     }
