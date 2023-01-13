@@ -131,7 +131,13 @@ namespace MBCC
             }
             std::string TotalFileData = MBUtility::ReadWholeFile(Input.CommandArguments[0]);
             MBCC::MBCCDefinitions Grammar;
-            Grammar = MBCC::MBCCDefinitions::ParseDefinitions(TotalFileData.data(),TotalFileData.size(),0);
+            std::string ErrorString;
+            Grammar = MBCC::MBCCDefinitions::ParseDefinitions(TotalFileData.data(),TotalFileData.size(),0,ErrorString);
+            if (ErrorString.size() > 0)
+            {
+                AssociatedTerminal.PrintLine(ErrorString);
+                return(1);
+            }
             ParserOptions ParsOpts;
             if(Input.CommandArgumentOptions.find("k") != Input.CommandArgumentOptions.end())
             {

@@ -117,6 +117,7 @@ namespace MBCC
         //-1 means that Max is unbounded
         int Max = 1;
         std::string AssignedMember;
+        int AssignOrder = -1;//Indicates no special order
         std::string ReferencedRule;
         //can either be a RuleIndex, or a TerminalIndex depending
         ParseIndex ComponentIndex = 0;
@@ -128,6 +129,7 @@ namespace MBCC
     };
     struct ParseRule
     {
+        bool NeedsAssignmentOrder = false;
         std::vector<RuleComponent> Components;
         std::vector<SemanticAction> Actions;
     };

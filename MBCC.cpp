@@ -1,4 +1,5 @@
 #include "MBCC.h"
+#include "MBUtility/MBErrorHandling.h"
 #include <assert.h>
 #include <iostream>
 #include <regex>
@@ -119,6 +120,10 @@ namespace MBCC
             ErrorMessage = Error;
             ParseOffset = NewParseOffset;
         }
+        const char* what() const override 
+        {
+            return(ErrorMessage.data());
+        }
     };
     std::string MBCCDefinitions::p_ParseIdentifier(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset)
     {
@@ -143,6 +148,60 @@ namespace MBCC
         *OutParseOffset = ParseOffset;
         return(ReturnValue);
     }
+    std::string h_ParseRegex(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,MBError* OutError)
+    {
+        std::string ReturnValue;
+        assert(Data[InParseOffset] == '"' && "h_ParseRegex must be called at precise start of the regex string"); 
+        //Assume start at "
+        size_t  StringBegin = InParseOffset+1;
+        size_t ParseOffset = InParseOffset+1; 
+        while(ParseOffset < DataSize)
+        {
+            size_t StringEnd = std::find(Data+ParseOffset,Data+DataSize,'"')-Data;
+            if(StringEnd == DataSize)
+            {
+                *OutError = false;
+                OutError->ErrorMessage = "missing unescaped \" at the end of regex string";
+                break;
+            }
+            size_t EscapeBegin = StringEnd-1; 
+            int EscapeCount = 0;
+            //Guaranteed to not go past InParseOffset[InParseOffset], as it's '"'
+            while(Data[EscapeBegin] == '\\')
+            {
+                EscapeCount += 1; 
+                EscapeBegin -= 1;
+            }
+            if(EscapeCount > 0)
+            {
+                //for every even \ add it to the overall string, if even we continue, otherwise we break
+                ReturnValue.insert(ReturnValue.end(),Data+StringBegin,Data+EscapeBegin+(EscapeCount/2));
+                if(EscapeCount % 2 == 0)
+                {
+                    ParseOffset = StringEnd;
+                    break;
+                }
+                else
+                {
+                    ReturnValue += '"';
+                    ParseOffset = StringEnd+1;
+                }
+            }
+            else
+            {
+                ReturnValue.insert(ReturnValue.end(),Data+StringBegin,Data+StringEnd);
+                ParseOffset = StringEnd;
+                break;
+            }
+        }
+        if(ParseOffset == DataSize)
+        {
+            *OutError = false;
+            OutError->ErrorMessage = "missing unescaped \" at the end of regex string";
+        }
+        *OutParseOffset = ParseOffset+1;
+        return(ReturnValue);
+    }
     Terminal MBCCDefinitions::p_ParseTerminal(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset)
     {
         Terminal ReturnValue;  
@@ -160,7 +219,7 @@ namespace MBCC
         ParseOffset+=1;
         MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
         MBError ParseStringResult = true;
-        std::string RegexString = MBParsing::ParseQuotedString(Data,DataSize,ParseOffset,&ParseOffset,&ParseStringResult);
+        std::string RegexString = h_ParseRegex(Data,DataSize,ParseOffset,&ParseOffset,&ParseStringResult);
         if(!ParseStringResult)
         {
             throw MBCCParseError("Syntactic error parsing MBCC definitions: error parsing quoted string for terminal definition: "+
@@ -361,6 +420,32 @@ struct Hej1 : Hej2
         *OutParseOffset = ParseOffset;     
         return ReturnValue;       
     }
+    //int MBCCDefinitions::p_ParseAssignOrder(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset)
+    //{
+    //    int ReturnValue = -1;
+    //    size_t ParseOffset = InParseOffset;
+    //    assert(Data[ParseOffset] == '>');
+    //    ParseOffset += 1;
+    //    size_t SpacePos = std::find(Data+ParseOffset,Data+DataSize,' ')-Data;
+    //    if(SpacePos == DataSize)
+    //    {
+    //        throw MBCCParseError("Syntactic error parsing order specification: space needed to delimit end of integer",InParseOffset);   
+    //    }
+    //    std::string IntString = std::string(Data+ParseOffset,Data+SpacePos);
+    //    try
+    //    {
+    //        ReturnValue = std::stoi(IntString);
+    //    }
+    //    catch(std::exception const& e)
+    //    {
+    //        throw MBCCParseError("Syntactic error parsing order specification: Invalid integer string: "+IntString,InParseOffset);   
+    //    }
+    //    if(ReturnValue < 0)
+    //    {
+    //        throw MBCCParseError("Semantic error parsing order specification: order has to be non-negative integer"+IntString,InParseOffset);   
+    //    }
+    //    return(ReturnValue);
+    //}
     std::vector<ParseRule> MBCCDefinitions::p_ParseParseRules(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset)
     {
         std::vector<ParseRule> ReturnValue;
@@ -400,6 +485,11 @@ struct Hej1 : Hej2
                 break;
             }
             RuleComponent NewComponent;
+            //if(Data[ParseOffset] == '>')
+            //{
+            //    NewComponent.AssignOrder = p_ParseAssignOrder(Data,DataSize,ParseOffset,&ParseOffset);
+            //    MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
+            //}
             std::string RuleName = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);    
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             if(ParseOffset >= DataSize)
@@ -453,7 +543,7 @@ struct Hej1 : Hej2
     }
     bool h_TypeIsBuiltin(std::string const& TypeToVerify)
     {
-        return(TypeToVerify == "String" || TypeToVerify == "Int" || TypeToVerify == "Bool");
+        return(TypeToVerify == "string" || TypeToVerify == "int" || TypeToVerify == "bool");
     }
     void MBCCDefinitions::p_VerifyStructs()
     {
@@ -479,7 +569,7 @@ struct Hej1 : Hej2
                     StructMemberVariable_Struct& StructMember = MemberVariable.GetType<StructMemberVariable_Struct>();
                     if(h_TypeIsBuiltin(MemberVariable.GetType<StructMemberVariable_Struct>().StructType))
                     {
-                        if(StructMember.StructType == "Int")
+                        if(StructMember.StructType == "int")
                         {
                             StructMemberVariable_Int NewMember;
                             NewMember.Name = MemberVariable.GetName();
@@ -494,7 +584,7 @@ struct Hej1 : Hej2
                             }
                             MemberVariable = StructMemberVariable(NewMember);
                         }
-                        else if(StructMember.StructType == "String")
+                        else if(StructMember.StructType == "string")
                         {
                             StructMemberVariable_String NewMember;
                             NewMember.Value = MemberVariable.GetDefaultValue();
@@ -503,7 +593,7 @@ struct Hej1 : Hej2
                             MemberVariable = StructMemberVariable(NewMember);
                                
                         }
-                        else if(StructMember.StructType == "Bool")
+                        else if(StructMember.StructType == "bool")
                         {
                             StructMemberVariable_Bool NewMember;   
                             NewMember.DefaultValue = MemberVariable.GetDefaultValue();
@@ -621,6 +711,8 @@ struct Hej1 : Hej2
             }
             for(auto& Rule : NonTerminal.Rules)
             {
+                bool HasThisAssignment = false;
+                bool HasRegularAssignment = false;
                 for(auto& Component : Rule.Components)
                 {
                     if(auto TermIt = NameToTerminal.find(Component.ReferencedRule); TermIt != NameToTerminal.end())
@@ -647,6 +739,7 @@ struct Hej1 : Hej2
                         }
                         if(Component.AssignedMember == "this")
                         {
+                            HasThisAssignment = true;
                             if(Component.IsTerminal)
                             {
                                 throw std::runtime_error("Semantic error parsing MBCC definitions: "
@@ -671,6 +764,7 @@ struct Hej1 : Hej2
                             }
                             continue;
                         }
+                        HasRegularAssignment = true;
                         //if(!AssociatedStruct->HasMember(Component.AssignedMember))
                         if(!HasMember(*AssociatedStruct,Component.AssignedMember))
                         {
@@ -744,6 +838,10 @@ struct Hej1 : Hej2
                         }
                     }
                 } 
+                if(HasRegularAssignment && HasThisAssignment)
+                {
+                    Rule.NeedsAssignmentOrder = true;   
+                }
             }
         } 
     }
@@ -807,7 +905,7 @@ struct Hej1 : Hej2
                 }
                 MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
                 MBError ParseError = true;
-                ReturnValue.SkipRegex = MBParsing::ParseQuotedString(Data,DataSize,ParseOffset,&ParseOffset,&ParseError);
+                ReturnValue.SkipRegex = h_ParseRegex(Data,DataSize,ParseOffset,&ParseOffset,&ParseError);
                 if(!ParseError)
                 {
                     throw std::runtime_error("Syntax error parsing MBCC definitions: Error parsing skip statement: "+ParseError.ErrorMessage);
@@ -923,6 +1021,11 @@ struct Hej1 : Hej2
                     if(Component.IsTerminal)
                     {
                         m_Nodes[RuleOffset].Edges.push_back(GLAEdge(Component.ComponentIndex,RuleOffset+1));
+                        if (Component.Max == -1 || Component.Min == 0)
+                        {
+                            //SKIP
+                            m_Nodes[RuleOffset].Edges.push_back(GLAEdge(-1, RuleOffset + 1));
+                        }
                     }
                     else
                     {
@@ -936,15 +1039,22 @@ struct Hej1 : Hej2
                         //TODO The article uses LOOk instead of FIRST and FOLLOW, so the case of when a Non terminal contains 
                         //fewer than K symbols in First might make it require a different step for the case of A*, it might
                         //be needed to be treated as a different terminal altogether
-
+                        
+                        //ADD FOLLOW from non terminal to current parse state, and add a skip to current parse state
+                        if(Component.Max == -1 || Component.Min == 0)
+                        {
+                            //SKIP
+                            m_Nodes[RuleOffset].Edges.push_back(GLAEdge(-1,RuleOffset+1));
+                        }
                         if(Component.Max == -1)
                         {
+                            //FOLLOW, terminal can follow itself
                             m_Nodes[Grammar.NonTerminals.size()+Component.ComponentIndex].Edges.push_back(GLAEdge(-1,Component.ComponentIndex));
                         }
                     }
                     RuleOffset++;
                 }
-                m_Nodes[RuleOffset].Edges.push_back(GLAEdge(Grammar.NonTerminals.size(),Grammar.NonTerminals.size()+i));
+                m_Nodes[RuleOffset].Edges.push_back(GLAEdge(Grammar.Terminals.size(),Grammar.NonTerminals.size()+i));
                 RuleOffset++;
             }
         }
@@ -978,7 +1088,7 @@ struct Hej1 : Hej2
                     ReturnValue[Edge.ConnectionTerminal] = true;
                     //EOF marker, special in that it both counts as a terminal
                     //and should continue the search
-                    if(Edge.ConnectionTerminal == m_TerminalCount+1)
+                    if(Edge.ConnectionTerminal == m_TerminalCount)
                     {
                         std::vector<bool> SubValues = p_LOOK(m_Nodes[Edge.Connection],0);
                         h_Combine(ReturnValue,SubValues);
@@ -1479,6 +1589,31 @@ struct Hej1 : Hej2
         //HeaderOut<<"template<typename A> void Traverse(T& Traveler,A& AST)\n{\nm_Traveler = &Traveler;\n(*this)(AST);\n}\n";
 
     }
+    std::string h_CppLiteralEscapeString(std::string const& StringToEscape)
+    {
+        std::string ReturnValue;
+        if(StringToEscape.empty())
+        {
+            return(ReturnValue);   
+        }
+        size_t ParseOffset = 0;
+        while(ParseOffset < StringToEscape.size())
+        {
+            size_t NextSlash = StringToEscape.find('\\', ParseOffset);
+            if(NextSlash == StringToEscape.npos)
+            {
+                ReturnValue.insert(ReturnValue.end(),StringToEscape.data()+ParseOffset,StringToEscape.data()+StringToEscape.size());
+                break;
+            }
+            else
+            {
+                ReturnValue.insert(ReturnValue.end(),StringToEscape.data()+ParseOffset,StringToEscape.data()+NextSlash);
+                ReturnValue += "\\\\";
+                ParseOffset = NextSlash+1;
+            }
+        }
+        return(ReturnValue);
+    }
     void LLParserGenerator::p_WriteHeader(MBCCDefinitions const& Grammar, MBUtility::MBOctetOutputStream& HeaderOut)
     {
 
@@ -1492,10 +1627,10 @@ struct Hej1 : Hej2
         DependancyInfo DepInfo = Grammar.DepInfo;
         h_WriteStructures(Grammar,DepInfo,HeaderOut);
         p_WriteFunctionHeaders(Grammar,HeaderOut);
-        HeaderOut<<"inline MBCC::Tokenizer GetTokenizer()\n{\nMBCC::Tokenizer ReturnValue(\""+Grammar.SkipRegex+"\",{"; 
+        HeaderOut<<"inline MBCC::Tokenizer GetTokenizer()\n{\nMBCC::Tokenizer ReturnValue(\""+h_CppLiteralEscapeString(Grammar.SkipRegex)+"\",{"; 
         for(auto const& Terminal : Grammar.Terminals)
         {
-            HeaderOut<<"\""<<Terminal.RegexDefinition<<"\",";   
+            HeaderOut<<"\""<<h_CppLiteralEscapeString(Terminal.RegexDefinition)<<"\",";   
         }
         HeaderOut <<"});\nreturn(ReturnValue);\n}";
     }
@@ -1695,6 +1830,42 @@ struct Hej1 : Hej2
             MBUtility::WriteData(SourceOut,"}\n");
         }
     }
+    std::string h_GetTypeCppTypeString(StructMemberVariable const& Member)
+    {
+        std::string ReturnValue;   
+        if(Member.IsType<StructMemberVariable_Struct>())
+        {
+            StructMemberVariable_Struct const& StructMember = Member.GetType<StructMemberVariable_Struct>();
+            ReturnValue = StructMember.StructType;
+        }
+        else if(Member.IsType<StructMemberVariable_List>())
+        {
+            StructMemberVariable_List const& ListMember = Member.GetType<StructMemberVariable_List>();
+            ReturnValue = "std::vector<"+ListMember.ListType+">";
+        }
+        else if(Member.IsType<StructMemberVariable_Bool>())
+        {
+            ReturnValue = "bool"; 
+        }
+        else if(Member.IsType<StructMemberVariable_Int>())
+        {
+            ReturnValue = "int"; 
+        }
+        else if(Member.IsType<StructMemberVariable_Raw>())
+        {
+            StructMemberVariable_Raw const& RawMember = Member.GetType<StructMemberVariable_Raw>();
+            ReturnValue = RawMember.RawMemberType;
+        }
+        else if(Member.IsType<StructMemberVariable_String>())
+        {
+            ReturnValue = "std::string"; 
+        }
+        else
+        {
+            assert(false && "h_GetTypeCppTypeString doesn't cover all cases, or Member stores an invalid type");   
+        }
+        return(ReturnValue);
+    }
     void LLParserGenerator::p_WriteNonTerminalProduction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTermIndex,int ProductionIndex,std::string const& FunctionName,MBUtility::MBOctetOutputStream& SourceOut)
     {
         std::string ReturnValueType = "void";
@@ -1714,22 +1885,66 @@ struct Hej1 : Hej2
         {
             MBUtility::WriteData(SourceOut,AssoicatedStruct->Name + " ReturnValue;\n");
         }
+        std::vector<std::string> DelayedAssignments;
         for(auto const& Component : Production.Components)
         {
-            if(Component.IsTerminal)
+            std::string AssignPrefix;
+            if(Component.AssignedMember != "")
             {
-                MBUtility::WriteData(SourceOut,"if(Tokenizer.Peek().Type != "+std::to_string(Component.ComponentIndex)+")\n{\nthrow std::runtime_error(\"Error parsing "+AssociatedNonTerminal.Name+": expected "+Grammar.Terminals[Component.ComponentIndex].Name
-                        +"\");\n}\n");
-                if(Component.AssignedMember != "")
+                if(Component.AssignedMember == "this")
                 {
-                    if(Component.AssignedMember == "this")
+                    AssignPrefix = "ReturnValue = ";   
+                }
+                else
+                {
+                    if(Production.NeedsAssignmentOrder)
                     {
-                        SourceOut << "ReturnValue = ";
+                        SourceOut <<h_GetTypeCppTypeString(Grammar.GetMember(*AssoicatedStruct,Component.AssignedMember))<<" "<<Component.AssignedMember<<";\n";    
+                        AssignPrefix = Component.AssignedMember;
+                        DelayedAssignments.push_back(Component.AssignedMember);
                     }
                     else
                     {
-                        MBUtility::WriteData(SourceOut,"ReturnValue."+Component.AssignedMember+"= ");
+                        AssignPrefix = "ReturnValue"; 
                     }
+                    if(AssociatedNonTerminal.AssociatedStruct != -1 && Grammar.DepInfo.ChildrenMap[AssociatedNonTerminal.AssociatedStruct].size() > 0 && !Production.NeedsAssignmentOrder)
+                    {
+                        AssignPrefix += ".GetBase()";
+                    }
+                    if(!Production.NeedsAssignmentOrder)
+                    {
+                        AssignPrefix += "."+Component.AssignedMember; 
+                    }
+                    if(Component.Max == -1)
+                    {
+                         AssignPrefix += ".push_back(";   
+                    }
+                    else
+                    {
+                         AssignPrefix += " = ";   
+                    }
+                }
+            }
+            if(Component.IsTerminal)
+            {
+                if (Component.Min == 1 && Component.Max == 1) {
+                    MBUtility::WriteData(SourceOut, "if(Tokenizer.Peek().Type != " + std::to_string(Component.ComponentIndex) + ")\n{\nthrow std::runtime_error(\"Error parsing " + AssociatedNonTerminal.Name + ": expected " + Grammar.Terminals[Component.ComponentIndex].Name
+                        + "\");\n}\n");
+                }
+                else 
+                {
+                    if (Component.Max == 1 && Component.Min == 0)
+                    {
+                        SourceOut << "if(Tokenizer.Peek().Type == " << std::to_string(Component.ComponentIndex) << ")\n{\n";
+                    }
+                    else if (Component.Max == -1)
+                    {
+                        SourceOut << "while(Tokenizer.Peek().Type == " << std::to_string(Component.ComponentIndex) << ")\n{\n";
+                    }
+                }
+                if(Component.AssignedMember != "")
+                {
+                    MBUtility::WriteData(SourceOut,AssignPrefix);
                     StructMemberVariable const& Member = Grammar.GetMember(*AssoicatedStruct,Component.AssignedMember);
                     if(Member.IsType<StructMemberVariable_String>())
                     {
@@ -1741,35 +1956,28 @@ struct Hej1 : Hej2
                     }
                     else if(Member.IsType<StructMemberVariable_Bool>())
                     {
-                        MBUtility::WriteData(SourceOut,"Tokenizer.Peek().Value == \"true\"");
+                        MBUtility::WriteData(SourceOut,"Tokenizer.Peek().Value == \"true\";\n");
                     }
                 } 
                 MBUtility::WriteData(SourceOut,"Tokenizer.ConsumeToken();\n");
+                if (!(Component.Max == 1 && Component.Min == 1))
+                {
+                    SourceOut << "\n}\n";
+                }
             } 
             else
             {
                 if(Component.Min == 1 && Component.Max == 1)
                 {
-                    if(Component.AssignedMember != "")
-                    {
-                        if(Component.AssignedMember == "this")
-                        {
-                            SourceOut << "ReturnValue = ";
-                        }
-                        else
-                        {
-                            MBUtility::WriteData(SourceOut,"ReturnValue."+Component.AssignedMember+"= "); 
-                        }
-                    }
+                    SourceOut<<AssignPrefix;
                     MBUtility::WriteData(SourceOut,"Parse"+Grammar.NonTerminals[Component.ComponentIndex].Name+"(Tokenizer);\n");
                 } 
                 else if(Component.Min == 0 && Component.Max == -1)
                 {
-                    MBUtility::WriteData(SourceOut,"while("+p_GetLOOKPredicate(Component.ComponentIndex)+")\n{");
+                    MBUtility::WriteData(SourceOut,"while("+p_GetLOOKPredicate(Component.ComponentIndex)+")\n{\n");
                     if(Component.AssignedMember != "")
                     {
-                        //NOTE: multi variable member cannot be assigned to this
-                        MBUtility::WriteData(SourceOut,"ReturnValue."+Component.AssignedMember+".push_back("); 
+                        SourceOut<<AssignPrefix;
                         MBUtility::WriteData(SourceOut,"Parse"+Grammar.NonTerminals[Component.ComponentIndex].Name+"(Tokenizer));\n}\n");
                     }
                     else
@@ -1779,11 +1987,11 @@ struct Hej1 : Hej2
                 }
                 else if(Component.Min == 0 && Component.Max == 1)
                 {
-                    MBUtility::WriteData(SourceOut,"if("+p_GetLOOKPredicate(Component.ComponentIndex)+")\n{");
+                    MBUtility::WriteData(SourceOut,"if("+p_GetLOOKPredicate(Component.ComponentIndex)+")\n{\n");
                     if(Component.AssignedMember != "")
                     {
                         //NOTE: multi variable member cannot be assigned to this
-                        MBUtility::WriteData(SourceOut,"ReturnValue."+Component.AssignedMember+"= "); 
+                        SourceOut<<AssignPrefix;
                     }
                     MBUtility::WriteData(SourceOut,"Parse"+Grammar.NonTerminals[Component.ComponentIndex].Name+"(Tokenizer);\n}\n");
                 }
@@ -1792,6 +2000,15 @@ struct Hej1 : Hej2
                     assert(false && "Min can only be 0 or 1, max can only be 1 or -1");
                 }
             }
+        }
+        for(auto const& MemberName : DelayedAssignments)
+        {
+            SourceOut<<"ReturnValue.";    
+            if(AssociatedNonTerminal.AssociatedStruct != -1 && Grammar.DepInfo.ChildrenMap[AssociatedNonTerminal.AssociatedStruct].size() > 0)
+            {
+                SourceOut<<"GetBase()."; 
+            }
+            SourceOut<<MemberName<<" = std::move("<<MemberName<<");\n";
         }
         for(auto const& Action : Grammar.NonTerminals[NonTermIndex].Rules[ProductionIndex].Actions)
         {
