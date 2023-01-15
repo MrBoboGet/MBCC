@@ -265,6 +265,7 @@ namespace MBCC
         std::vector<std::regex> m_TerminalRegexes;
         std::deque<Token> m_StoredTokens;
         Token p_ExtractToken();
+        std::pair<int,int> p_GetLineAndPosition(size_t ParseOffset);
     public:
         Tokenizer(std::string const& SkipRegex,std::initializer_list<std::string> TerminalRegexes);
         void SetText(std::string NewText);

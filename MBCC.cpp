@@ -174,8 +174,10 @@ namespace MBCC
             }
             if(EscapeCount > 0)
             {
+                //EscapeBegin points now at the first \ character
+                EscapeBegin += 1;
                 //for every even \ add it to the overall string, if even we continue, otherwise we break
-                ReturnValue.insert(ReturnValue.end(),Data+StringBegin,Data+EscapeBegin+(EscapeCount/2));
+                ReturnValue.insert(ReturnValue.end(),Data+ParseOffset,Data+EscapeBegin+(EscapeCount/2));
                 if(EscapeCount % 2 == 0)
                 {
                     ParseOffset = StringEnd;
@@ -189,7 +191,7 @@ namespace MBCC
             }
             else
             {
-                ReturnValue.insert(ReturnValue.end(),Data+StringBegin,Data+StringEnd);
+                ReturnValue.insert(ReturnValue.end(),Data+ParseOffset,Data+StringEnd);
                 ParseOffset = StringEnd;
                 break;
             }
@@ -574,13 +576,16 @@ struct Hej1 : Hej2
                             StructMemberVariable_Int NewMember;
                             NewMember.Name = MemberVariable.GetName();
                             NewMember.DefaultValue = MemberVariable.GetDefaultValue();
-                            try
+                            if(NewMember.DefaultValue != "")
                             {
-                                NewMember.Value = std::stoi(NewMember.DefaultValue);
-                            }
-                            catch(std::exception const& e)
-                            {
-                                throw std::runtime_error("Semantic error parsing MBCC definitions: Int member variable not a valid integer");
+                                try
+                                {
+                                    NewMember.Value = std::stoi(NewMember.DefaultValue);
+                                }
+                                catch(std::exception const& e)
+                                {
+                                    throw std::runtime_error("Semantic error parsing MBCC definitions: Int member variable not a valid integer");
+                                }
                             }
                             MemberVariable = StructMemberVariable(NewMember);
                         }
@@ -1164,16 +1169,37 @@ struct Hej1 : Hej2
         }     
         if(ReturnValue.Type == m_TerminalRegexes.size()+1)
         {
-            throw std::runtime_error("Invalid character sequence: no terminal matching input at byte offset "+std::to_string(m_ParseOffset));   
+            auto LineAndPosition = p_GetLineAndPosition(m_ParseOffset);
+            throw std::runtime_error("Invalid character sequence: no terminal matching input at line "+std::to_string(LineAndPosition.first) +" and column " + std::to_string(LineAndPosition.second));
         }
         return(ReturnValue);
+    }
+    std::pair<int,int> Tokenizer::p_GetLineAndPosition(size_t TargetPosition)
+    {
+        std::pair<int,int> ReturnValue = {1,1};
+        size_t ParseOffset = 0;
+        while(ParseOffset < TargetPosition)
+        {
+            size_t NextNewline = m_TextData.find('\n',ParseOffset);
+            if(NextNewline == m_TextData.npos)
+            {
+                ReturnValue.second = TargetPosition-ParseOffset; 
+                break;
+            }
+            else
+            {
+                ReturnValue.first += 1;
+                ParseOffset = NextNewline+1;
+            }
+        }
+        return ReturnValue;
     }
     Tokenizer::Tokenizer(std::string const& SkipRegex,std::initializer_list<std::string> TerminalRegexes)
     {
         m_Skip = std::regex(SkipRegex,std::regex_constants::ECMAScript|std::regex_constants::nosubs); 
         for(auto const& String : TerminalRegexes)
         {
-            m_TerminalRegexes.emplace_back(String);
+            m_TerminalRegexes.emplace_back(String,std::regex_constants::ECMAScript|std::regex_constants::nosubs);
         }
     }
     void Tokenizer::SetText(std::string NewText)
@@ -1547,6 +1573,7 @@ struct Hej1 : Hej2
                 HeaderOut<<ConcreteStructName << "() = default;\n";
                 HeaderOut<<ConcreteStructName << "("<<ConcreteStructName<<"&&) = default;\n";
                 HeaderOut<<"template<typename T> bool IsType() const\n{\nreturn m_TypeID == p_GetTypeID<T>();\n}\n";
+                HeaderOut<<"bool IsEmpty() const\n{\nreturn m_Data == nullptr;\n}\n";
                 HeaderOut<<"void operator=("<<ConcreteStructName<<"&& StructToMove)\n{\nstd::swap(m_TypeID,StructToMove.m_TypeID);\nstd::swap(m_Data,StructToMove.m_Data);\n}\n";
                 HeaderOut<<"template<typename T> T const& GetType() const\n{\nif(!IsType<T>() || m_Data == nullptr)\n{\nthrow std::runtime_error(\"Invalid type access for abstract AST class\");\n}return static_cast<T const&>(*m_Data);\n}\n";
                 HeaderOut<<"template<typename T> T& GetType()\n{\nif(!IsType<T>() || m_Data == nullptr)\n{\nthrow std::runtime_error(\"Invalid type access for abstract AST class\");\n}return static_cast<T&>(*m_Data);\n}\n";
@@ -1600,16 +1627,19 @@ struct Hej1 : Hej2
         while(ParseOffset < StringToEscape.size())
         {
             size_t NextSlash = StringToEscape.find('\\', ParseOffset);
-            if(NextSlash == StringToEscape.npos)
+            size_t NextQuote = StringToEscape.find('"',ParseOffset);
+            size_t NextEscape = std::min(NextSlash,NextQuote);
+            if(NextEscape == StringToEscape.npos)
             {
                 ReturnValue.insert(ReturnValue.end(),StringToEscape.data()+ParseOffset,StringToEscape.data()+StringToEscape.size());
                 break;
             }
             else
             {
-                ReturnValue.insert(ReturnValue.end(),StringToEscape.data()+ParseOffset,StringToEscape.data()+NextSlash);
-                ReturnValue += "\\\\";
-                ParseOffset = NextSlash+1;
+                ReturnValue.insert(ReturnValue.end(),StringToEscape.data()+ParseOffset,StringToEscape.data()+NextEscape);
+                ReturnValue += '\\';
+                ReturnValue += StringToEscape[NextEscape];
+                ParseOffset = NextEscape+1;
             }
         }
         return(ReturnValue);
