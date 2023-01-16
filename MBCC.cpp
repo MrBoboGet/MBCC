@@ -1163,6 +1163,7 @@ struct Hej1 : Hej2
                 assert(Match.size() == 1);        
                 ReturnValue.Value = Match[0].str();
                 ReturnValue.Type = i;
+                ReturnValue.ByteOffset = m_ParseOffset;
                 m_ParseOffset += ReturnValue.Value.size();
                 break;
             }
@@ -1174,7 +1175,23 @@ struct Hej1 : Hej2
         }
         return(ReturnValue);
     }
-    std::pair<int,int> Tokenizer::p_GetLineAndPosition(size_t TargetPosition)
+    std::string Tokenizer::GetPositionString() const
+    {
+        std::string ReturnValue;       
+        size_t ByteOffset = 0;
+        if(m_StoredTokens.size() > 0)
+        {
+            ByteOffset = m_StoredTokens.front().ByteOffset;
+        }
+        else
+        {
+            ByteOffset = m_ParseOffset;   
+        }
+        auto LineAndPosition = p_GetLineAndPosition(m_ParseOffset);
+        ReturnValue = "line "+std::to_string(LineAndPosition.first)+", col "+std::to_string(LineAndPosition.second);
+        return(ReturnValue);
+    }
+    std::pair<int,int> Tokenizer::p_GetLineAndPosition(size_t TargetPosition) const
     {
         std::pair<int,int> ReturnValue = {1,1};
         size_t ParseOffset = 0;
@@ -1958,7 +1975,7 @@ struct Hej1 : Hej2
             if(Component.IsTerminal)
             {
                 if (Component.Min == 1 && Component.Max == 1) {
-                    MBUtility::WriteData(SourceOut, "if(Tokenizer.Peek().Type != " + std::to_string(Component.ComponentIndex) + ")\n{\nthrow std::runtime_error(\"Error parsing " + AssociatedNonTerminal.Name + ": expected " + Grammar.Terminals[Component.ComponentIndex].Name
+                    MBUtility::WriteData(SourceOut, "if(Tokenizer.Peek().Type != " + std::to_string(Component.ComponentIndex) + ")\n{\nthrow std::runtime_error(\"Error parsing " + AssociatedNonTerminal.Name + " at \" + Tokenizer.GetPositionString()+ \" : expected " + Grammar.Terminals[Component.ComponentIndex].Name
                         + "\");\n}\n");
                 }
                 else 
