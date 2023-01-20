@@ -15,8 +15,8 @@ struct StructDefinition
 }
 struct MemberDefinition
 {
-    String Type = "";
-    String Name = "";
+    string Type = "";
+    string Name = "";
 }
 def StructDefinition=StructDefinition;
 def MemberDefinition=MemberDefinition;

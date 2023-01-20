@@ -47,10 +47,10 @@ void PrintResult(MBCC::MBCCDefinitions const& DataToPrint)
             std::cout<<"rule"<<"\n";
             for(auto const& Component : Rule.Components)
             {
-                std::cout<<"comp referencing "<<Component.ReferencedRule;
-                if(Component.AssignedMember != "")
+                std::cout<<"comp referencing "<<Component.ReferencedRule.Names[0];
+                if(Component.AssignedMember.Names.size() != 0)
                 {
-                    std::cout<<" with  assigned member "<<Component.AssignedMember;   
+                    std::cout<<" with  assigned member "<<Component.AssignedMember.Names[0];   
                 }
                 std::cout<<" "<<std::to_string(Component.Min);
                 std::cout<<" "<<std::to_string(Component.Max);

@@ -1,4 +1,5 @@
 #pragma once
+#include <stdint.h>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -38,6 +39,10 @@ namespace MBCC
     public:
         int Value = 0;
     };
+    class StructMemberVariable_tokenPosition : public MemberVariable
+    {
+    public:
+    };
     class StructMemberVariable_Bool : public MemberVariable
     {
     public:
@@ -54,7 +59,7 @@ namespace MBCC
     class StructMemberVariable
     {
         std::variant<StructMemberVariable_Raw,StructMemberVariable_List,StructMemberVariable_Struct,StructMemberVariable_Int,StructMemberVariable_String,
-            StructMemberVariable_Bool> 
+            StructMemberVariable_Bool,StructMemberVariable_tokenPosition>
             m_Content;
     public:
         StructMemberVariable() = default;
@@ -64,6 +69,7 @@ namespace MBCC
         StructMemberVariable(StructMemberVariable_Int RawMemberVariable);
         StructMemberVariable(StructMemberVariable_Bool RawMemberVariable);
         StructMemberVariable(StructMemberVariable_String StructMemberVariable);
+        StructMemberVariable(StructMemberVariable_tokenPosition StructMemberVariable);
         std::string& GetName();
         std::string& GetDefaultValue();
         std::string const& GetName() const;
@@ -105,20 +111,39 @@ namespace MBCC
         //StructMemberVariable& GetMember(std::string const& MemberName);
     };
     typedef int RuleIndex;
-    //-1 reserved for the empty word / end of file
     typedef int TerminalIndex;
     typedef int NonTerminalIndex;
     typedef int ParseIndex;
-    typedef int StructIndex;
+    typedef uint_least32_t StructIndex;
+    typedef uint_least32_t TypeInfo;
+
+    namespace TypeFlags
+    {
+        constexpr unsigned int List = 1u<<31;   
+        constexpr unsigned int String = 1u<<30;   
+        constexpr unsigned int Int = 1u<<29;   
+        constexpr unsigned int Bool = 1u<<28;   
+        constexpr unsigned int Token = 1u<<27;  
+        constexpr unsigned int TokenPos = 1u<<26;
+        constexpr unsigned int Raw = 1u<<25;   
+
+        constexpr unsigned int Base = ~(List|String|Int|Bool|Token|Raw|TokenPos);
+    }
+
+    struct MemberExpression
+    {
+        std::vector<TypeInfo> PartTypes;
+        std::vector<std::string> Names;
+    };
     struct RuleComponent
     {
         bool IsTerminal = false;
         int Min = 1;
         //-1 means that Max is unbounded
         int Max = 1;
-        std::string AssignedMember;
+        MemberExpression AssignedMember;
         int AssignOrder = -1;//Indicates no special order
-        std::string ReferencedRule;
+        MemberExpression ReferencedRule;
         //can either be a RuleIndex, or a TerminalIndex depending
         ParseIndex ComponentIndex = 0;
     };
@@ -169,9 +194,15 @@ namespace MBCC
         static std::pair<std::string,std::string> p_ParseDef(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
         static StructMemberVariable p_ParseMemberVariable(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
         static StructDefinition p_ParseStruct(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
+        static MemberExpression p_ParseMemberExpression(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
         static std::vector<ParseRule> p_ParseParseRules(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
 
+        
+
         bool p_IsAssignable(StructIndex Lhs,StructIndex Rhs);
+        TypeInfo p_GetMemberTypeInfo(StructDefinition const& StructScope,MemberExpression& Member,std::string& OutError);
+        TypeInfo p_GetRHSTypeInfo(MemberExpression& RHSExpression,int RHSMax,std::string& OutError);
+        bool p_IsAssignable(StructDefinition const& StructScope,MemberExpression& StructExpression,MemberExpression& RHSExpression,int LHSMax,std::string& OutError);
     public:
         std::vector<Terminal> Terminals;
         std::vector<NonTerminal> NonTerminals;
@@ -189,6 +220,7 @@ namespace MBCC
         static MBCCDefinitions ParseDefinitions(const char* Data,size_t DataSize,size_t ParseOffset,std::string& OutError);
 
         bool HasMember(StructDefinition const& StructDef,std::string const& Member);
+        StructMemberVariable const* TryGetMember(StructDefinition const& StructDef,std::string const& Member) const;
         StructMemberVariable const& GetMember(StructDefinition const& StructDef,std::string const& Member) const;
         StructMemberVariable& GetMember(StructDefinition& StructDef,std::string const& Member);
     };
@@ -307,6 +339,9 @@ namespace MBCC
         std::vector<std::vector<std::string>> m_ProductionPredicates;
         void p_WriteNonTerminalFunction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTerminal, MBUtility::MBOctetOutputStream& SourceOut);
         void p_WriteNonTerminalProduction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTerminal,int ProductionIndex,std::string const& FunctionName,MBUtility::MBOctetOutputStream& SourceOut);
+
+
+        static std::string p_GetTypeString(MBCCDefinitions const& Grammar,TypeInfo Type);
         //Could possibly cache result
         //-1 to specify full look
     public:

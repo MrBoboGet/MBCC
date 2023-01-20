@@ -7,4 +7,8 @@
 /compile_commands.json
 /MBPM_FileInfo
 /CMakeLists.txt
+/Spec2.mbnf
+/MBObjectSpec_Parser.cpp
+/MBObjectSpec_Parser.h
+/makefile
 !.gitignore
