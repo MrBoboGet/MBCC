@@ -460,7 +460,7 @@ struct Hej1 : Hej2
         size_t ParseOffset = InParseOffset;
         while(ParseOffset < DataSize)
         {
-            std::string NewPart = p_ParseIdentifier(Data,DataSize,ParseOffset,OutParseOffset);
+            std::string NewPart = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             ReturnValue.Names.push_back(std::move(NewPart));
             ReturnValue.PartTypes.push_back(-1);
@@ -477,6 +477,7 @@ struct Hej1 : Hej2
         {
             throw MBCCParseError("Syntactic error parsing MBCC definitions: Member expression needs atleast one member",ParseOffset);
         }
+        *OutParseOffset = ParseOffset;
         return(ReturnValue);
     }
     std::vector<ParseRule> MBCCDefinitions::p_ParseParseRules(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset)
@@ -491,6 +492,7 @@ struct Hej1 : Hej2
         ParseOffset +=1;
         MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
         ParseRule CurrentRule;
+        int TotalComponents = 0;
         while(ParseOffset < DataSize)
         {
             //does allow for empty rules, s
@@ -567,7 +569,15 @@ struct Hej1 : Hej2
                 ParseOffset++;
             }
             NewComponent.ReferencedRule = std::move(RuleExpression);
-            CurrentRule.Components.push_back(NewComponent);
+            if(NewComponent.ReferencedRule.Names[0] == "TOKEN")
+            {
+                CurrentRule.MetaComponents.push_back({TotalComponents,std::move(NewComponent)});
+            }
+            else
+            {
+                CurrentRule.Components.push_back(std::move(NewComponent));
+            }
+            TotalComponents += 1;
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
         }
         if(CurrentRule.Components.size() != 0)
@@ -852,6 +862,10 @@ struct Hej1 : Hej2
         {
             ReturnValue += "int";
         }
+        else if (Info & TypeFlags::TokenPos)
+        {
+            ReturnValue += "tokenPos";
+        }
         else
         {
             ReturnValue += Grammar.Structs[Info & (~TypeFlags::List)].Name;
@@ -930,6 +944,7 @@ struct Hej1 : Hej2
             else if(CurrentMember->IsType<StructMemberVariable_Struct>())
             {
                 ReturnValue = Grammar.NameToStruct.at(CurrentMember->GetType<StructMemberVariable_Struct>().StructType);
+                CurrentStruct = &Grammar.Structs[ReturnValue];
             }
             else if(CurrentMember->IsType<StructMemberVariable_List>())
             {
@@ -1029,6 +1044,7 @@ struct Hej1 : Hej2
                     return(-1);
                 }
                 ReturnValue = NonTerminals[NonTermIt->second].AssociatedStruct;
+                CurrentScope = &Structs[NonTerminals[NonTermIt->second].AssociatedStruct];
             }
             RHSExpression.PartTypes[0] = ReturnValue;
             NameOffset += 1;
@@ -1078,56 +1094,27 @@ struct Hej1 : Hej2
             {
                 AssociatedStruct = &Structs[NonTerminal.AssociatedStruct];
             }
+            //REFACTOR
             for(auto& Rule : NonTerminal.Rules)
             {
                 bool HasThisAssignment = false;
                 bool HasRegularAssignment = false;
                 for(auto& Component : Rule.Components)
                 {
-                    if(auto TermIt = NameToTerminal.find(Component.ReferencedRule.Names[0]); TermIt != NameToTerminal.end())
-                    {
-                        Component.IsTerminal = true;
-                        Component.ComponentIndex = TermIt->second;
-                    }   
-                    else if(auto NonTermIt = NameToNonTerminal.find(Component.ReferencedRule.Names[0]); NonTermIt != NameToNonTerminal.end())
-                    {
-                        Component.IsTerminal = false;
-                        Component.ComponentIndex = NonTermIt->second;
-                        if(Component.ReferencedRule.Names.size() > 1)
-                        {
-                            throw std::runtime_error("Semantic error parsing MBCC definitions: "
-                                    "terminal \""+Component.ReferencedRule.Names[0] + "\" has no member "
-                                    " \""+Component.ReferencedRule.Names[1]+"\"");
-                        }
-                    }
-                    else
-                    {
-                        throw std::runtime_error("Semantic error parsing MBCC definitions: "
-                                "rule referencing unkown terminal/non-terminal named"
-                                " \""+Component.ReferencedRule.Names[0]+"\"");
-                    }
-                    if(AssociatedStruct != nullptr)
-                    {
-                        if(Component.AssignedMember.Names.size() == 0)
-                        {
-                            continue;   
-                        }
-                        if(Component.AssignedMember.Names[0] == "this")
-                        {
-                            HasThisAssignment = true;
-                        }
-                        else
-                        {
-                            HasRegularAssignment = true;   
-                        }
-                        std::string Error;
-                        if(!p_IsAssignable(*AssociatedStruct,Component.AssignedMember,Component.ReferencedRule,Component.Max,Error))
-                        {
-                            throw std::runtime_error("Semantic error parsing MBCC definitions: Error in assignment of non terminal \""+NonTerminal.Name+"\": "
-                                    "Error in assignment to member \""+Component.AssignedMember.Names[0]+"\": "
-                                    +Error);
-                        }
-                    }
+                    p_VerifyComponent(Component,NonTerminal.Name,AssociatedStruct,HasThisAssignment,HasRegularAssignment);
+                } 
+                if(HasRegularAssignment && HasThisAssignment)
+                {
+                    Rule.NeedsAssignmentOrder = true;   
+                }
+            }
+            for(auto& Rule : NonTerminal.Rules)
+            {
+                bool HasThisAssignment = false;
+                bool HasRegularAssignment = false;
+                for(auto& Component : Rule.MetaComponents)
+                {
+                    p_VerifyComponent(Component.second,NonTerminal.Name,AssociatedStruct,HasThisAssignment,HasRegularAssignment);
                 } 
                 if(HasRegularAssignment && HasThisAssignment)
                 {
@@ -1135,6 +1122,57 @@ struct Hej1 : Hej2
                 }
             }
         } 
+    }
+    void MBCCDefinitions::p_VerifyComponent(RuleComponent& Component,std::string const& NonTermName,StructDefinition const* AssociatedStruct,bool& HasThisAssignment,bool& HasRegularAssignment)
+    {
+        if(Component.ReferencedRule.Names[0] == "TOKEN")
+        {
+            Component.IsTerminal = true;
+        }
+        else if(auto TermIt = NameToTerminal.find(Component.ReferencedRule.Names[0]); TermIt != NameToTerminal.end())
+        {
+            Component.IsTerminal = true;
+            Component.ComponentIndex = TermIt->second;
+            if(Component.ReferencedRule.Names.size() > 1)
+            {
+                throw std::runtime_error("Semantic error parsing MBCC definitions: "
+                        "terminal \""+Component.ReferencedRule.Names[0] + "\" has no member "
+                        " \""+Component.ReferencedRule.Names[1]+"\"");
+            }
+        }   
+        else if(auto NonTermIt = NameToNonTerminal.find(Component.ReferencedRule.Names[0]); NonTermIt != NameToNonTerminal.end())
+        {
+            Component.IsTerminal = false;
+            Component.ComponentIndex = NonTermIt->second;
+        }
+        else
+        {
+            throw std::runtime_error("Semantic error parsing MBCC definitions: "
+                    "rule referencing unkown terminal/non-terminal named"
+                    " \""+Component.ReferencedRule.Names[0]+"\"");
+        }
+        if(AssociatedStruct != nullptr)
+        {
+            if(Component.AssignedMember.Names.size() == 0)
+            {
+                return;   
+            }
+            if(Component.AssignedMember.Names[0] == "this")
+            {
+                HasThisAssignment = true;
+            }
+            else
+            {
+                HasRegularAssignment = true;   
+            }
+            std::string Error;
+            if(!p_IsAssignable(*AssociatedStruct,Component.AssignedMember,Component.ReferencedRule,Component.Max,Error))
+            {
+                throw std::runtime_error("Semantic error parsing MBCC definitions: Error in assignment of non terminal \""+NonTermName+"\": "
+                        "Error in assignment to member \""+Component.AssignedMember.Names[0]+"\": "
+                        +Error);
+            }
+        }
     }
     //Parse def already verifies that all links between struct and non-terminal/terminal is true
     //here we only have to verify wheter or not the parse rules and structures abide by the semantics
@@ -1255,7 +1293,7 @@ struct Hej1 : Hej2
     }
     int h_OffsetToLine(const char* Data,size_t ParseOffset)
     {
-        int ReturnValue = 0;    
+        int ReturnValue = 1;    
         for(size_t i = 0; i < ParseOffset;i++)
         {
             if(Data[i] == '\n')
@@ -1309,10 +1347,10 @@ struct Hej1 : Hej2
                 m_Nodes[i].Edges.push_back(GLAEdge(-1,RuleOffset));
                 for(auto const& Component : Rule.Components)
                 {
-                    if(Component.ReferencedRule.Names[0] == "TOKEN")
-                    {
-                        continue;
-                    }
+                    //if(Component.ReferencedRule.Names[0] == "TOKEN")
+                    //{
+                    //    continue;
+                    //}
                     if(Component.IsTerminal)
                     {
                         m_Nodes[RuleOffset].Edges.push_back(GLAEdge(Component.ComponentIndex,RuleOffset+1));
@@ -2240,6 +2278,7 @@ struct Hej1 : Hej2
         if(IsList) ReturnValue += ">"; 
         return(ReturnValue);
     }
+    //TODO clean up this gigantic mess...
     void LLParserGenerator::p_WriteNonTerminalProduction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTermIndex,int ProductionIndex,std::string const& FunctionName,MBUtility::MBOctetOutputStream& SourceOut)
     {
         std::string ReturnValueType = "void";
@@ -2261,8 +2300,22 @@ struct Hej1 : Hej2
         }
         //first = member, second = name
         std::vector<std::pair<std::string,std::string>> DelayedAssignments;
-        for(auto const& Component : Production.Components)
+        int RegularComponentCount = 0;
+        int MetaComponentCount = 0;
+        for(int i = 0; i < Production.MetaComponents.size() + Production.Components.size();i++)
         {
+            RuleComponent const* ComponentPointer = nullptr;
+            if(MetaComponentCount < Production.MetaComponents.size() && i == Production.MetaComponents[MetaComponentCount].first)
+            {
+                ComponentPointer = &Production.MetaComponents[MetaComponentCount].second;
+                MetaComponentCount++;
+            }
+            else
+            {
+                ComponentPointer = &Production.Components[RegularComponentCount];
+                RegularComponentCount++;   
+            }
+            auto const& Component = *ComponentPointer;
             std::string AssignPrefix;
             std::string RHSMemberString;
             //associated struct not null
@@ -2345,45 +2398,49 @@ struct Hej1 : Hej2
             }
             if(Component.IsTerminal)
             {
-                if (Component.Min == 1 && Component.Max == 1) {
-                    MBUtility::WriteData(SourceOut, "if(Tokenizer.Peek().Type != " + std::to_string(Component.ComponentIndex) + ")\n{\nthrow std::runtime_error(\"Error parsing " + AssociatedNonTerminal.Name + " at \" + Tokenizer.GetPositionString()+ \" : expected " + Grammar.Terminals[Component.ComponentIndex].Name
-                        + "\");\n}\n");
+                if(Component.ReferencedRule.Names[0] == "TOKEN")
+                {
+                    SourceOut<<AssignPrefix<<"Tokenizer.Peek()."<<Component.ReferencedRule.Names[1]<<";\n";
                 }
-                else 
+                else
                 {
-                    if (Component.Max == 1 && Component.Min == 0)
-                    {
-                        SourceOut << "if(Tokenizer.Peek().Type == " << std::to_string(Component.ComponentIndex) << ")\n{\n";
+                    if (Component.Min == 1 && Component.Max == 1) {
+                        MBUtility::WriteData(SourceOut, "if(Tokenizer.Peek().Type != " + std::to_string(Component.ComponentIndex) + ")\n{\nthrow std::runtime_error(\"Error parsing " + AssociatedNonTerminal.Name + " at \" + Tokenizer.GetPositionString()+ \" : expected " + Grammar.Terminals[Component.ComponentIndex].Name
+                                + "\");\n}\n");
                     }
-                    else if (Component.Max == -1)
+                    else 
                     {
-                        SourceOut << "while(Tokenizer.Peek().Type == " << std::to_string(Component.ComponentIndex) << ")\n{\n";
+                        if (Component.Max == 1 && Component.Min == 0)
+                        {
+                            SourceOut << "if(Tokenizer.Peek().Type == " << std::to_string(Component.ComponentIndex) << ")\n{\n";
+                        }
+                        else if (Component.Max == -1)
+                        {
+                            SourceOut << "while(Tokenizer.Peek().Type == " << std::to_string(Component.ComponentIndex) << ")\n{\n";
+                        }
                     }
-                }
-                if(Component.AssignedMember.Names.size() != 0)
-                {
-                    MBUtility::WriteData(SourceOut,AssignPrefix);
-                    StructMemberVariable const& Member = Grammar.GetMember(*AssoicatedStruct,Component.AssignedMember.Names[0]);
-                    if(Member.IsType<StructMemberVariable_String>())
+                    if(Component.AssignedMember.Names.size() != 0)
                     {
-                        MBUtility::WriteData(SourceOut,"Tokenizer.Peek().Value;\n");
-                    }
-                    else if(Member.IsType<StructMemberVariable_Int>())
-                    {
-                        MBUtility::WriteData(SourceOut,"std::stoi(Tokenizer.Peek().Value);\n");
-                    }
-                    else if(Member.IsType<StructMemberVariable_Bool>())
-                    {
-                        MBUtility::WriteData(SourceOut,"Tokenizer.Peek().Value == \"true\";\n");
-                    }
-                } 
-                if(Component.AssignedMember.Names.size() != 0 && Component.AssignedMember.Names[0] != "TOKEN")
-                {
+                        MBUtility::WriteData(SourceOut,AssignPrefix);
+                        StructMemberVariable const& Member = Grammar.GetMember(*AssoicatedStruct,Component.AssignedMember.Names[0]);
+                        if(Member.IsType<StructMemberVariable_String>())
+                        {
+                            MBUtility::WriteData(SourceOut,"Tokenizer.Peek().Value;\n");
+                        }
+                        else if(Member.IsType<StructMemberVariable_Int>())
+                        {
+                            MBUtility::WriteData(SourceOut,"std::stoi(Tokenizer.Peek().Value);\n");
+                        }
+                        else if(Member.IsType<StructMemberVariable_Bool>())
+                        {
+                            MBUtility::WriteData(SourceOut,"Tokenizer.Peek().Value == \"true\";\n");
+                        }
+                    } 
                     MBUtility::WriteData(SourceOut,"Tokenizer.ConsumeToken();\n");
-                }
-                if (!(Component.Max == 1 && Component.Min == 1))
-                {
-                    SourceOut << "\n}\n";
+                    if (!(Component.Max == 1 && Component.Min == 1))
+                    {
+                        SourceOut << "\n}\n";
+                    }
                 }
             } 
             else

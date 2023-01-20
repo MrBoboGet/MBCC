@@ -157,6 +157,7 @@ namespace MBCC
         bool NeedsAssignmentOrder = false;
         std::vector<RuleComponent> Components;
         std::vector<SemanticAction> Actions;
+        std::vector<std::pair<int,RuleComponent>> MetaComponents;
     };
     struct Terminal
     {
@@ -169,10 +170,16 @@ namespace MBCC
         StructIndex AssociatedStruct = -1;
         std::vector<ParseRule> Rules;
     };
+    struct TokenPosition
+    {
+        int Line = 0;    
+        int ByteOffset = 0;
+    };
     struct Token
     {
         TerminalIndex Type = -1;
         size_t ByteOffset;
+        TokenPosition Position;
         std::string Value;    
     };
     struct DependancyInfo
@@ -185,6 +192,8 @@ namespace MBCC
     {
     private:
         void p_VerifyStructs();
+        //MEGA ugly, refactor
+        void p_VerifyComponent(RuleComponent& ComponentToVerify,std::string const& NonTerminalName,StructDefinition const* AssociatedStruct,bool& ThisAssignment,bool& RegularAssignment);
         void p_VerifyRules();
         void p_UpdateReferencesAndVerify();
 
@@ -293,6 +302,8 @@ namespace MBCC
     private:      
         //Easy interfac, memeory map everything   
         size_t m_ParseOffset = 0;
+        int m_LineOffset = 0;
+        int m_LineByteOffset = 0;
         std::string m_TextData;
         std::regex m_Skip;
         std::vector<std::regex> m_TerminalRegexes;

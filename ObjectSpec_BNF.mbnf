@@ -18,7 +18,29 @@ struct MemberDefinition
     string Type = "";
     string Name = "";
 }
+struct TokenPositionTest
+{
+    tokenPos Position;
+    string Name;
+}
+struct SubMemberTest
+{
+    string Id;
+    TokenPositionTest Position;
+}
+struct SubMemberUser
+{
+    string Id;
+    tokenPos Position;
+}
+def IdfPos=TokenPositionTest;
 def StructDefinition=StructDefinition;
 def MemberDefinition=MemberDefinition;
+def SubMemberTest = SubMemberTest;
+def SubMemberUser = SubMemberUser;
+SubMemberTest=Id=idf Position=IdfPos;
+SubMemberUser = Id=SubMemberTest.Id Position=SubMemberTest.Position.Position;
+
+IdfPos = Position=TOKEN.Position Name=idf;
 StructDefinition = struct idf lcurl Members=MemberDefinition* rcurl;
 MemberDefinition = Type=idf Name=idf semicolon | lsquare Type=idf Name=idf semicolon rsquare;
