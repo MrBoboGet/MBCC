@@ -174,6 +174,12 @@ namespace MBCC
     {
         int Line = 0;    
         int ByteOffset = 0;
+        TokenPosition() {}
+        TokenPosition(int LinePos,int NewByteOffset)
+        {
+            Line = LinePos;
+            ByteOffset = NewByteOffset;   
+        }
     };
     struct Token
     {
@@ -302,7 +308,7 @@ namespace MBCC
     private:      
         //Easy interfac, memeory map everything   
         size_t m_ParseOffset = 0;
-        int m_LineOffset = 0;
+        int m_LineOffset = 1;
         int m_LineByteOffset = 0;
         std::string m_TextData;
         std::regex m_Skip;

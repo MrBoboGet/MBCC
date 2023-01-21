@@ -510,6 +510,7 @@ struct Hej1 : Hej2
                 }
                 ReturnValue.push_back(std::move(CurrentRule));          
                 CurrentRule = ParseRule();
+                TotalComponents = 0;
                 ParseOffset+=1;
                 MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
                 continue;
@@ -1477,8 +1478,21 @@ struct Hej1 : Hej2
         std::string const& TextRef = m_TextData;
         if(std::regex_search(TextRef.begin()+m_ParseOffset,TextRef.end(),Match,m_Skip,std::regex_constants::match_continuous))
         {
-            assert(Match.size() == 1);        
-            m_ParseOffset += Match[0].length();    
+            assert(Match.size() == 1);
+            size_t SkipCount = Match[0].length();
+            for(size_t i = m_ParseOffset; i < m_ParseOffset+SkipCount;i++)
+            {
+                if(m_TextData[i] == '\n')
+                {
+                    m_LineOffset += 1;
+                    m_LineByteOffset = 0;
+                }   
+                else
+                {
+                    m_LineByteOffset += 1;   
+                }
+            }
+            m_ParseOffset += SkipCount;
         }
         if(m_ParseOffset == m_TextData.size())
         {
@@ -1492,6 +1506,20 @@ struct Hej1 : Hej2
                 ReturnValue.Value = Match[0].str();
                 ReturnValue.Type = i;
                 ReturnValue.ByteOffset = m_ParseOffset;
+                ReturnValue.Position = TokenPosition(m_LineOffset,m_LineByteOffset);
+                size_t SkipCount = Match[0].length();
+                for(size_t i = m_ParseOffset; i < m_ParseOffset+SkipCount;i++)
+                {
+                    if(m_TextData[i] == '\n')
+                    {
+                        m_LineOffset += 1;
+                        m_LineByteOffset = 0;
+                    }   
+                    else
+                    {
+                        m_LineByteOffset += 1;   
+                    }
+                }
                 m_ParseOffset += ReturnValue.Value.size();
                 break;
             }
@@ -1550,6 +1578,8 @@ struct Hej1 : Hej2
     void Tokenizer::SetText(std::string NewText)
     {
         m_ParseOffset = 0;       
+        m_LineByteOffset = 0;
+        m_LineOffset = 1;
         m_TextData = std::move(NewText);
         m_StoredTokens.clear();
     }
