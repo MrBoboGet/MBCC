@@ -1103,23 +1103,14 @@ struct Hej1 : Hej2
                 for(auto& Component : Rule.Components)
                 {
                     p_VerifyComponent(Component,NonTerminal.Name,AssociatedStruct,HasThisAssignment,HasRegularAssignment);
-                } 
-                if(HasRegularAssignment && HasThisAssignment)
-                {
-                    Rule.NeedsAssignmentOrder = true;   
                 }
-            }
-            for(auto& Rule : NonTerminal.Rules)
-            {
-                bool HasThisAssignment = false;
-                bool HasRegularAssignment = false;
-                for(auto& Component : Rule.MetaComponents)
+                for (auto& Component : Rule.MetaComponents)
                 {
-                    p_VerifyComponent(Component.second,NonTerminal.Name,AssociatedStruct,HasThisAssignment,HasRegularAssignment);
-                } 
-                if(HasRegularAssignment && HasThisAssignment)
+                    p_VerifyComponent(Component.second, NonTerminal.Name, AssociatedStruct, HasThisAssignment, HasRegularAssignment);
+                }
+                if (HasRegularAssignment && HasThisAssignment)
                 {
-                    Rule.NeedsAssignmentOrder = true;   
+                    Rule.NeedsAssignmentOrder = true;
                 }
             }
         } 
