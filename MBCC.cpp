@@ -1136,6 +1136,14 @@ struct Hej1 : Hej2
         {
             Component.IsTerminal = false;
             Component.ComponentIndex = NonTermIt->second;
+            if(Component.AssignedMember.Names.size() > 0)
+            {
+                if(NonTerminals[NonTermIt->second].AssociatedStruct == -1)
+                {
+                    throw std::runtime_error("Semantic error parsing MBCC definitions: "
+                            "assignment in non-terminal"+NonTermName +" but non-terminal doesn't have an associated struct");
+                }
+            }
         }
         else
         {

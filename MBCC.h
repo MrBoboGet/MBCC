@@ -180,6 +180,19 @@ namespace MBCC
             Line = LinePos;
             ByteOffset = NewByteOffset;   
         }
+        bool operator<(TokenPosition const& Rhs) const noexcept
+        {
+            bool ReturnValue = false;
+            if(Line < Rhs.Line)
+            {
+                ReturnValue = true;    
+            }
+            else if(Line == Rhs.Line)
+            {
+                ReturnValue = ByteOffset < Rhs.ByteOffset;
+            }
+            return(ReturnValue);
+        }
     };
     struct Token
     {
