@@ -2212,31 +2212,35 @@ struct Hej1 : Hej2
         }
         MBUtility::WriteData(SourceOut,ReturnValueType+" Parse"+AssociatedNonTerminal.Name+"(MBCC::Tokenizer& Tokenizer)\n{\n");
         SourceOut<<ReturnValueType<<" ReturnValue;\n";
-        for(int i = 0; i < AssociatedNonTerminal.Rules.size();i++)
+        if(AssociatedNonTerminal.Rules.size() > 1)
         {
-            if(i != 0)
+            for(int i = 0; i < AssociatedNonTerminal.Rules.size();i++)
             {
-                MBUtility::WriteData(SourceOut,"else ");   
-            }
-            if(i != AssociatedNonTerminal.Rules.size()-1 || AssociatedNonTerminal.Rules.size() == 1)
-            {
+                if(i != 0)
+                {
+                    MBUtility::WriteData(SourceOut,"else ");   
+                }
                 MBUtility::WriteData(SourceOut,"if "); 
-            }
-            std::string const& LookPredicate = p_GetLOOKPredicate(NonTermIndex,i);
-            assert(LookPredicate.size() != 0);
-            if(AssociatedNonTerminal.Rules.size() == 1 || i + 1 < AssociatedNonTerminal.Rules.size())
-            {
+                std::string const& LookPredicate = p_GetLOOKPredicate(NonTermIndex,i);
+                assert(LookPredicate.size() != 0);
                 MBUtility::WriteData(SourceOut,"("+LookPredicate+")\n{\n");    
+                if(AssoicatedStruct != nullptr)
+                {
+                    MBUtility::WriteData(SourceOut,"ReturnValue = ");    
+                }
+                MBUtility::WriteData(SourceOut,"Parse"+AssociatedNonTerminal.Name+"_"+std::to_string(i)+"(Tokenizer);\n}\n");
             }
-            else
-            {
-                SourceOut << "\n{\n";
-            }
+            SourceOut<<"else\n{\n throw MBCC::ParsingException(Tokenizer.Peek().Position,\""<<AssociatedNonTerminal.Name<<"\","<<
+                "\""<<AssociatedNonTerminal.Name<<"\");\n}\n";
+
+        }
+        else
+        {
             if(AssoicatedStruct != nullptr)
             {
                 MBUtility::WriteData(SourceOut,"ReturnValue = ");    
             }
-            MBUtility::WriteData(SourceOut,"Parse"+AssociatedNonTerminal.Name+"_"+std::to_string(i)+"(Tokenizer);\n}\n");
+            MBUtility::WriteData(SourceOut,"Parse"+AssociatedNonTerminal.Name+"_"+std::to_string(0)+"(Tokenizer);\n");
         }
         if(AssoicatedStruct != nullptr)
         {
@@ -2433,9 +2437,12 @@ struct Hej1 : Hej2
                 }
                 else
                 {
-                    if (Component.Min == 1 && Component.Max == 1) {
-                        MBUtility::WriteData(SourceOut, "if(Tokenizer.Peek().Type != " + std::to_string(Component.ComponentIndex) + ")\n{\nthrow std::runtime_error(\"Error parsing " + AssociatedNonTerminal.Name + " at \" + Tokenizer.GetPositionString()+ \" : expected " + Grammar.Terminals[Component.ComponentIndex].Name
-                                + "\");\n}\n");
+                    if (Component.Min == 1 && Component.Max == 1) 
+                    {
+                        SourceOut <<"if(Tokenizer.Peek().Type != " << std::to_string(Component.ComponentIndex) << 
+                            ")\n{\nthrow MBCC::ParsingException(Tokenizer.Peek().Position,"<<"\""<<AssociatedNonTerminal.Name <<"\",\""
+                            <<Grammar.Terminals[Component.ComponentIndex].Name <<"\""<<
+                                ");\n}\n";
                     }
                     else 
                     {
@@ -2490,9 +2497,16 @@ struct Hej1 : Hej2
                 }
                 if(Component.Min == 1 && Component.Max == 1)
                 {
-                    SourceOut<<AssignPrefix;
-                    SourceOut<<ConverterPrefix<<"Parse"<<Grammar.NonTerminals[Component.ComponentIndex].Name<<"(Tokenizer)"<<
-                        RHSMemberString<<ConverterSuffix<<";\n";
+                    SourceOut<<"if("<<p_GetLOOKPredicate(Component.ComponentIndex)<<")\n{\n";
+                    if(Component.AssignedMember.Names.size() != 0)
+                    {
+                        //NOTE: multi variable member cannot be assigned to this
+                        SourceOut<<AssignPrefix;
+                    }
+                    SourceOut<<ConverterPrefix<<"Parse"<<Grammar.NonTerminals[Component.ComponentIndex].Name<<"(Tokenizer)"<<RHSMemberString
+                        <<ConverterSuffix<<";\n}\n";
+                    SourceOut<<"else\n{\n throw MBCC::ParsingException(Tokenizer.Peek().Position,\""<<AssociatedNonTerminal.Name<<"\","<<
+                        "\""<<Grammar.NonTerminals[Component.ComponentIndex].Name<<"\");\n}\n";
                 } 
                 else if(Component.Min == 0 && Component.Max == -1)
                 {
@@ -2511,7 +2525,7 @@ struct Hej1 : Hej2
                 else if(Component.Min == 0 && Component.Max == 1)
                 {
                     SourceOut<<"if("<<p_GetLOOKPredicate(Component.ComponentIndex)<<")\n{\n";
-                    if(Component.AssignedMember.Names[0].size() != 0)
+                    if(Component.AssignedMember.Names.size() != 0)
                     {
                         //NOTE: multi variable member cannot be assigned to this
                         SourceOut<<AssignPrefix;

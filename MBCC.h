@@ -345,6 +345,28 @@ namespace MBCC
         CPPStreamIndenter(MBUtility::MBOctetOutputStream* StreamToConvert);
         size_t Write(const void* DataToWrite,size_t DataSize) override;
     };
+
+    class ParsingException : public std::exception
+    {
+        std::string m_ErrorMessage;
+    public: 
+        TokenPosition Position; 
+        std::string NonterminalName;
+        std::string ExpectedType;
+        ParsingException();
+        ParsingException(TokenPosition NewPosition,std::string NewNonTerminal,std::string NewExpectedType)
+            : NonterminalName(std::move(NewNonTerminal)),ExpectedType(std::move(NewExpectedType))
+        {
+            Position = NewPosition;
+            m_ErrorMessage = "Error parsing "+NonterminalName+" at line "+std::to_string(NewPosition.Line)+", col "+
+                std::to_string(NewPosition.Line)+" : expected "+ExpectedType;
+        }
+        const char* what() const override
+        {
+            return(m_ErrorMessage.c_str());
+        }
+    };
+
     std::vector<bool> CalculateENonTerminals(MBCCDefinitions const& Grammar);
     class LLParserGenerator
     {
