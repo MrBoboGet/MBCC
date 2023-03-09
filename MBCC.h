@@ -119,13 +119,13 @@ namespace MBCC
 
     namespace TypeFlags
     {
-        constexpr unsigned int List = 1u<<31;   
-        constexpr unsigned int String = 1u<<30;   
-        constexpr unsigned int Int = 1u<<29;   
-        constexpr unsigned int Bool = 1u<<28;   
-        constexpr unsigned int Token = 1u<<27;  
-        constexpr unsigned int TokenPos = 1u<<26;
-        constexpr unsigned int Raw = 1u<<25;   
+        constexpr uint_least32_t List = 1u<<31;   
+        constexpr uint_least32_t String = 1u<<30;   
+        constexpr uint_least32_t Int = 1u<<29;   
+        constexpr uint_least32_t Bool = 1u<<28;   
+        constexpr uint_least32_t Token = 1u<<27;  
+        constexpr uint_least32_t TokenPos = 1u<<26;
+        constexpr uint_least32_t Raw = 1u<<25;   
 
         constexpr unsigned int Base = ~(List|String|Int|Bool|Token|Raw|TokenPos);
     }
@@ -353,7 +353,12 @@ namespace MBCC
         TokenPosition Position; 
         std::string NonterminalName;
         std::string ExpectedType;
-        ParsingException();
+        ParsingException(ParsingException&&) noexcept = default;
+        ParsingException(ParsingException const&) = default;
+        ParsingException()
+        {
+               
+        }
         ParsingException(TokenPosition NewPosition,std::string NewNonTerminal,std::string NewExpectedType)
             : NonterminalName(std::move(NewNonTerminal)),ExpectedType(std::move(NewExpectedType))
         {
@@ -361,7 +366,7 @@ namespace MBCC
             m_ErrorMessage = "Error parsing "+NonterminalName+" at line "+std::to_string(NewPosition.Line)+", col "+
                 std::to_string(NewPosition.Line)+" : expected "+ExpectedType;
         }
-        const char* what() const override
+        const char* what() const noexcept override
         {
             return(m_ErrorMessage.c_str());
         }

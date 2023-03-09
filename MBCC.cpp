@@ -126,7 +126,7 @@ namespace MBCC
             ErrorMessage = Error;
             ParseOffset = NewParseOffset;
         }
-        const char* what() const override 
+        const char* what() const noexcept override 
         {
             return(ErrorMessage.data());
         }
@@ -886,7 +886,7 @@ struct Hej1 : Hej2
         }
         else if(Info & TypeFlags::String)
         {
-            ReturnValue += "string";
+            ReturnValue += "std::string";
         }
         else if(Info & TypeFlags::TokenPos)
         {
@@ -1817,6 +1817,10 @@ struct Hej1 : Hej2
             int MaxDepDepth = -1;      
             for(auto const& Dependancy : StructureDependancies[CurrentStructIndex])
             {
+                if(CurrentStructIndex == Dependancy)
+                {
+                   continue;    
+                }
                 int NewDepth = h_CalculateDepth(Dependancy,Busy,OutDependancyDepth,StructureDependancies);
                 if(NewDepth > MaxDepDepth)
                 {
@@ -2470,6 +2474,22 @@ struct Hej1 : Hej2
                         else if(Member.IsType<StructMemberVariable_Bool>())
                         {
                             MBUtility::WriteData(SourceOut,"Tokenizer.Peek().Value == \"true\";\n");
+                        }
+                        else if(Member.IsType<StructMemberVariable_List>())
+                        {
+                            StructMemberVariable_List const& ListData = Member.GetType<StructMemberVariable_List>();
+                            if(ListData.ListType == "string")
+                            {
+                                MBUtility::WriteData(SourceOut,"Tokenizer.Peek().Value);\n");
+                            }
+                            else if(ListData.ListType == "int")
+                            {
+                                MBUtility::WriteData(SourceOut,"std::stoi(Tokenizer.Peek().Value));\n");
+                            }
+                            else if(ListData.ListType == "bool")
+                            {
+                                MBUtility::WriteData(SourceOut,"Tokenizer.Peek().Value == \"true\");\n");
+                            }
                         }
                     } 
                     MBUtility::WriteData(SourceOut,"Tokenizer.ConsumeToken();\n");

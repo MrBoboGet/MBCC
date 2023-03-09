@@ -12,3 +12,6 @@
 /MBObjectSpec_Parser.h
 /makefile
 !.gitignore
+/Input.json
+/Output.json
+/README.html
