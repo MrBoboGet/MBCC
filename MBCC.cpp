@@ -1374,7 +1374,7 @@ struct Hej1 : Hej2
                         //be needed to be treated as a different terminal altogether
                         
                         //ADD FOLLOW from non terminal to current parse state, and add a skip to current parse state
-                        if(Component.Max == -1 || Component.Min == 0)
+                        if(Component.Min == 0)
                         {
                             //SKIP
                             m_Nodes[RuleOffset].Edges.push_back(GLAEdge(-1,RuleOffset+1));
@@ -2528,6 +2528,21 @@ struct Hej1 : Hej2
                     SourceOut<<"else\n{\n throw MBCC::ParsingException(Tokenizer.Peek().Position,\""<<AssociatedNonTerminal.Name<<"\","<<
                         "\""<<Grammar.NonTerminals[Component.ComponentIndex].Name<<"\");\n}\n";
                 } 
+                else if(Component.Min == 1 && Component.Max == -1)
+                {
+                    SourceOut<<"do\n{\n";    
+                    if(Component.AssignedMember.Names.size() != 0)
+                    {
+                        SourceOut<<AssignPrefix;
+                        SourceOut<< ConverterPrefix<<"Parse"<<Grammar.NonTerminals[Component.ComponentIndex].Name<<"(Tokenizer)"<<RHSMemberString
+                            << ConverterSuffix<<");\n}\n";
+                    }
+                    else
+                    {
+                        SourceOut<<"Parse"<<Grammar.NonTerminals[Component.ComponentIndex].Name<<"(Tokenizer);\n}\n";
+                    }
+                    SourceOut<<"while("<<p_GetLOOKPredicate(Component.ComponentIndex)<<");\n";
+                }
                 else if(Component.Min == 0 && Component.Max == -1)
                 {
                     MBUtility::WriteData(SourceOut,"while("+p_GetLOOKPredicate(Component.ComponentIndex)+")\n{\n");
