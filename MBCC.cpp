@@ -1077,7 +1077,7 @@ struct Hej1 : Hej2
         }
         StructIndex LHSStruct = LHSType & (~TypeFlags::List);
         StructIndex RHSStruct = RHSType & (~TypeFlags::List);
-        if(((LHSType & TypeFlags::List) != (RHSType & TypeFlags::List) || !p_IsAssignable(LHSStruct,RHSStruct)))
+        if((  ((RHSType & TypeFlags::List) && !(LHSType & TypeFlags::List)) || !p_IsAssignable(LHSStruct,RHSStruct)))
         {
             std::string LHSName = h_GetPrintTypeName(*this,LHSType);
             std::string RHSName = h_GetPrintTypeName(*this,RHSType);
@@ -1499,10 +1499,14 @@ struct Hej1 : Hej2
         }
         for(TerminalIndex i = 0; i < m_TerminalRegexes.size();i++)
         {
-            if(std::regex_search(TextRef.begin()+m_ParseOffset,TextRef.end(),Match,m_TerminalRegexes[i],std::regex_constants::match_continuous))
+            if(std::regex_search(TextRef.begin()+m_ParseOffset,TextRef.end(),Match,m_TerminalRegexes[i].first,std::regex_constants::match_continuous))
             {
-                assert(Match.size() == 1);        
-                ReturnValue.Value = Match[0].str();
+                //assert(Match.size() == 1);        
+                if(!(m_TerminalRegexes[i].second < Match.size()))
+                {
+                    throw std::runtime_error("Regex at index "+std::to_string(i)+" have insufficient submatches");
+                }
+                ReturnValue.Value = Match[m_TerminalRegexes[i].second].str();
                 ReturnValue.Type = i;
                 ReturnValue.ByteOffset = m_ParseOffset;
                 ReturnValue.Position = TokenPosition(m_LineOffset,m_LineByteOffset);
@@ -1519,7 +1523,7 @@ struct Hej1 : Hej2
                         m_LineByteOffset += 1;   
                     }
                 }
-                m_ParseOffset += ReturnValue.Value.size();
+                m_ParseOffset += SkipCount;
                 break;
             }
         }     
@@ -1571,7 +1575,14 @@ struct Hej1 : Hej2
         m_Skip = std::regex(SkipRegex,std::regex_constants::ECMAScript|std::regex_constants::nosubs); 
         for(auto const& String : TerminalRegexes)
         {
-            m_TerminalRegexes.emplace_back(String,std::regex_constants::ECMAScript|std::regex_constants::nosubs);
+            if(String.size() != 0 && String[0] == '$')
+            {
+                m_TerminalRegexes.push_back(std::pair<std::regex,int>(std::regex(String.substr(1),std::regex_constants::ECMAScript),1));
+            }
+            else
+            {
+                m_TerminalRegexes.push_back(std::pair<std::regex,int>(std::regex(String,std::regex_constants::ECMAScript|std::regex_constants::nosubs),0));
+            }
         }
     }
     void Tokenizer::SetText(std::string NewText)

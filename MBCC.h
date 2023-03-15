@@ -325,7 +325,7 @@ namespace MBCC
         int m_LineByteOffset = 0;
         std::string m_TextData;
         std::regex m_Skip;
-        std::vector<std::regex> m_TerminalRegexes;
+        std::vector<std::pair<std::regex,int>> m_TerminalRegexes;
         std::deque<Token> m_StoredTokens;
         Token p_ExtractToken();
         std::pair<int,int> p_GetLineAndPosition(size_t ParseOffset) const;  
