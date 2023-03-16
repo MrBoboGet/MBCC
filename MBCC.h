@@ -132,6 +132,7 @@ namespace MBCC
 
     struct MemberExpression
     {
+        TypeInfo ResultType;
         std::vector<TypeInfo> PartTypes;
         std::vector<std::string> Names;
     };

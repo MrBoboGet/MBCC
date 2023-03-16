@@ -1070,11 +1070,14 @@ struct Hej1 : Hej2
         {
             return(false);   
         }
+        StructExpression.ResultType = LHSType;
         TypeInfo RHSType = p_GetRHSTypeInfo(RHSExpression,RHSMax,OutError);
         if(RHSType == -1)
         {
             return(false);   
         }
+
+        RHSExpression.ResultType = RHSType;
         StructIndex LHSStruct = LHSType & (~TypeFlags::List);
         StructIndex RHSStruct = RHSType & (~TypeFlags::List);
         if((  ((RHSType & TypeFlags::List) && !(LHSType & TypeFlags::List)) || !p_IsAssignable(LHSStruct,RHSStruct)))
@@ -1084,6 +1087,7 @@ struct Hej1 : Hej2
             OutError  = "LHS has type "+LHSName+" and RHS has incompatible type "+RHSName;
             ReturnValue = false;
         }
+
         return(ReturnValue);
     }
     void MBCCDefinitions::p_VerifyRules()
@@ -2434,7 +2438,8 @@ struct Hej1 : Hej2
                     {
                         AssignPrefix = "ReturnValue"+MemberSpecificationString; 
                     }
-                    if(Component.Max == -1)
+                    if(Component.Max == -1 || 
+                            ((Component.AssignedMember.ResultType & TypeFlags::List) && !(Component.ReferencedRule.ResultType & TypeFlags::List)))
                     {
                          AssignPrefix += ".push_back(";   
                     }
@@ -2472,34 +2477,39 @@ struct Hej1 : Hej2
                     }
                     if(Component.AssignedMember.Names.size() != 0)
                     {
+                        std::string Suffix = ";\n";
+                        if((Component.AssignedMember.ResultType & TypeFlags::List) && !(Component.ReferencedRule.ResultType & TypeFlags::List))
+                        {
+                            Suffix = ");\n";
+                        }
                         MBUtility::WriteData(SourceOut,AssignPrefix);
                         StructMemberVariable const& Member = Grammar.GetMember(*AssoicatedStruct,Component.AssignedMember.Names[0]);
                         if(Member.IsType<StructMemberVariable_String>())
                         {
-                            MBUtility::WriteData(SourceOut,"Tokenizer.Peek().Value;\n");
+                            SourceOut<<"Tokenizer.Peek().Value"<<Suffix;
                         }
                         else if(Member.IsType<StructMemberVariable_Int>())
                         {
-                            MBUtility::WriteData(SourceOut,"std::stoi(Tokenizer.Peek().Value);\n");
+                            SourceOut<<"std::stoi(Tokenizer.Peek().Value)"<<Suffix;
                         }
                         else if(Member.IsType<StructMemberVariable_Bool>())
                         {
-                            MBUtility::WriteData(SourceOut,"Tokenizer.Peek().Value == \"true\";\n");
+                            SourceOut<<"Tokenizer.Peek().Value == \"true\""<<Suffix;
                         }
                         else if(Member.IsType<StructMemberVariable_List>())
                         {
                             StructMemberVariable_List const& ListData = Member.GetType<StructMemberVariable_List>();
                             if(ListData.ListType == "string")
                             {
-                                MBUtility::WriteData(SourceOut,"Tokenizer.Peek().Value);\n");
+                                SourceOut<<"Tokenizer.Peek().Value"<<Suffix;
                             }
                             else if(ListData.ListType == "int")
                             {
-                                MBUtility::WriteData(SourceOut,"std::stoi(Tokenizer.Peek().Value));\n");
+                                SourceOut<<"std::stoi(Tokenizer.Peek().Value)"<<Suffix;
                             }
                             else if(ListData.ListType == "bool")
                             {
-                                MBUtility::WriteData(SourceOut,"Tokenizer.Peek().Value == \"true\");\n");
+                                SourceOut<<"Tokenizer.Peek().Value == \"true\""<<Suffix;
                             }
                         }
                     } 
@@ -2514,7 +2524,7 @@ struct Hej1 : Hej2
             {
                 std::string ConverterPrefix = "";
                 std::string ConverterSuffix = "";
-                if(Component.AssignedMember.Names.size() !=  0 && Component.ReferencedRule.PartTypes.back() & TypeFlags::String)
+                if(Component.AssignedMember.Names.size() !=  0 && (Component.ReferencedRule.PartTypes.back() & TypeFlags::String))
                 {
                     if(Component.AssignedMember.PartTypes.back() & TypeFlags::Bool)
                     {
@@ -2525,6 +2535,11 @@ struct Hej1 : Hej2
                         ConverterPrefix = "std::stoi(";   
                         ConverterSuffix = ")";
                     }
+                }
+                if((Component.AssignedMember.ResultType & TypeFlags::List) && !(Component.ReferencedRule.ResultType & TypeFlags::List))
+                {
+                    //a extra ) is added because of pushback(...
+                    ConverterSuffix += ")";
                 }
                 if(Component.Min == 1 && Component.Max == 1)
                 {
