@@ -1469,6 +1469,10 @@ struct Hej1 : Hej2
     //}
     //END GLA
 
+    bool Tokenizer::IsEOF(Token const& TokenToExamine)
+    {
+        return(TokenToExamine.Type == m_TerminalRegexes.size()+1);
+    }
     Token Tokenizer::p_ExtractToken() 
     {
         Token ReturnValue;
@@ -1593,7 +1597,7 @@ struct Hej1 : Hej2
     {
         m_ParseOffset = 0;       
         m_LineByteOffset = 0;
-        m_LineOffset = 1;
+        m_LineOffset = 0;
         m_TextData = std::move(NewText);
         m_StoredTokens.clear();
     }

@@ -198,7 +198,7 @@ namespace MBCC
     struct Token
     {
         TerminalIndex Type = -1;
-        size_t ByteOffset;
+        size_t ByteOffset = 0;
         TokenPosition Position;
         std::string Value;    
     };
@@ -322,7 +322,7 @@ namespace MBCC
     private:      
         //Easy interfac, memeory map everything   
         size_t m_ParseOffset = 0;
-        int m_LineOffset = 1;
+        int m_LineOffset = 0;
         int m_LineByteOffset = 0;
         std::string m_TextData;
         std::regex m_Skip;
@@ -334,6 +334,7 @@ namespace MBCC
         Tokenizer(std::string const& SkipRegex,std::initializer_list<std::string> TerminalRegexes);
         void SetText(std::string NewText);
         void ConsumeToken();
+        bool IsEOF(Token const& TokenToExamine);
         Token const& Peek(int Depth = 0);
         std::string GetPositionString() const;
     };
