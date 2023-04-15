@@ -13,6 +13,119 @@
 #include <set>
 namespace MBCC
 {
+
+    template<typename T>
+    int GetTypeBegin()
+    {
+        static_assert(false,"GetTypeBegin only works with template specialization");  
+        return(-1);
+    } 
+    template<typename T>
+    int GetTypeEnd()
+    {
+        static_assert(false,"GetTypeEnd only works with template specialization");  
+        return(-1);
+    } 
+    class AST_Base
+    {
+    public:
+        virtual std::unique_ptr<AST_Base> Copy() const = 0; 
+        virtual ~AST_Base()
+        {
+               
+        }
+    };
+    template<typename T>
+    std::unique_ptr<AST_Base> CopyAST(T const& ObjectToCopy)
+    {
+        return(std::unique_ptr<AST_Base>(new T(ObjectToCopy)));
+    }
+    //class AST_Copier : public AST_Base
+    //{
+    //public:
+    //    virtual std::unique_ptr<AST_Base> Copy() const override
+    //    {
+    //        return(std::unique_ptr<AST_Base>(new T(static_cast<T const&>(*this))));
+    //    }
+    //    typedef T This;
+    //};
+    template<typename C>
+    class PolyBase
+    {
+    protected:
+        std::unique_ptr<C> m_Data;
+        int m_TypeID = -1;
+        public:
+        //template<typename T> void Accept(T& Visitor);
+        //template<typename T> void Accept(T& Visitor) const;
+        template<typename T> PolyBase(T ObjectToStore)
+        {
+            static_assert(std::is_base_of<C,T>::value);
+            m_Data = std::unique_ptr<C>(new T(std::move(ObjectToStore)));
+            m_TypeID = GetTypeBegin<T>();
+        }
+        PolyBase(std::unique_ptr<C> NewData,int Type)
+        {
+            m_Data = std::move(NewData);
+            m_TypeID = Type;
+        }
+        PolyBase(PolyBase const& BaseToCopy)
+        {
+            m_TypeID = BaseToCopy.m_TypeID;
+            std::unique_ptr<AST_Base> CopiedStruct = m_Data->Copy();
+            AST_Base* CopiedPointer = CopiedStruct.release();
+            m_Data = std::unique_ptr<C>(static_cast<C*>(CopiedPointer));
+        }
+        PolyBase() = default;
+        PolyBase(PolyBase&&) = default;
+        template<typename T> bool IsType() const
+        {
+            static_assert(std::is_base_of_v<C,T>, "Can only check type for possible derived value");
+            auto IDToCompare = GetTypeBegin<T>();
+            return(IDToCompare <= m_TypeID && m_TypeID < GetTypeEnd<T>());
+        }
+        bool IsEmpty() const
+        {
+            return m_Data == nullptr;
+        }
+        void operator=(PolyBase StructToMove)
+        {
+            std::swap(m_TypeID,StructToMove.m_TypeID);
+            std::swap(m_Data,StructToMove.m_Data);
+        }
+        template<typename T> T const& GetType() const
+        {
+            if(!IsType<T>() || m_Data == nullptr)
+            {
+                throw std::runtime_error("Invalid type access for abstract AST class");
+            }
+            return static_cast<T const&>(*m_Data);
+        }
+        template<typename T> T& GetType()
+        {
+            if(!IsType<T>() || m_Data == nullptr)
+            {
+                throw std::runtime_error("Invalid type access for abstract AST class");
+            }
+            return static_cast<T&>(*m_Data);
+        }
+        C& GetBase()
+        {
+            if(m_Data == nullptr)
+            {
+                throw std::runtime_error("Invalid type access for abstract AST class: data is null");
+            }
+            return static_cast<C&>(*m_Data);
+        }
+        C const& GetBase() const
+        {
+            if(m_Data == nullptr)
+            {
+                throw std::runtime_error("Invalid type access for abstract AST class: data is null");
+            }
+            return static_cast<C const&>(*m_Data);
+        }
+    };
     class MemberVariable
     {
     public:

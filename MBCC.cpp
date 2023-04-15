@@ -1897,9 +1897,23 @@ struct Hej1 : Hej2
                 });
         return(ReturnValue);
     }
-    void h_WriteStructures(MBCCDefinitions const& Grammar,DependancyInfo const& DepInfo,MBUtility::MBOctetOutputStream& HeaderOut)
+    int h_UpdateInheritanceOrder(int CurrentOffset,StructIndex CurrentStruct,DependancyInfo const& DepInfo,std::vector<int>& OutBegin,std::vector<int>& OutEnd)
     {
+        int OriginalOffset = CurrentOffset;
+        OutBegin[CurrentStruct] = CurrentOffset;
+        CurrentOffset++;
+        for(auto Child : DepInfo.ChildrenMap[CurrentStruct])
+        {
+            CurrentOffset += h_UpdateInheritanceOrder(CurrentOffset,Child,DepInfo,OutBegin,OutEnd);
+        }
+        int ReturnValue = CurrentOffset-OriginalOffset;
+        OutEnd[CurrentStruct] = CurrentOffset;
+        return(ReturnValue);
+    }
+    void h_WriteStructures(MBCCDefinitions const& Grammar,DependancyInfo const& DepInfo,MBUtility::MBOctetOutputStream& HeaderOut)
+        {
         std::vector<StructIndex> AbstractStructs;
+        //One of baseses
         for(StructIndex CurrentIndex : DepInfo.StructureDependancyOrder)
         {
             StructDefinition const& CurrentStruct = Grammar.Structs[CurrentIndex];
@@ -1909,14 +1923,18 @@ struct Hej1 : Hej2
                 StructName += "_Base";
                 AbstractStructs.push_back(CurrentIndex);
             }
-            HeaderOut << "class "<<StructName;
+            HeaderOut << "class "<<StructName << " : ";
             if(CurrentStruct.ParentStruct != "")
             {
-                HeaderOut<<" : public "<<CurrentStruct.ParentStruct;
+                HeaderOut<<"public "<<CurrentStruct.ParentStruct;
                 if(DepInfo.ChildrenMap[Grammar.NameToStruct.at(CurrentStruct.ParentStruct)].size() > 0)
                 {
                     HeaderOut<<"_Base";   
                 }
+            }
+            else
+            {
+                HeaderOut<<  " public MBCC::AST_Base";
             }
             HeaderOut<<"\n{\n";
             HeaderOut<<"public:\n";
@@ -1965,55 +1983,78 @@ struct Hej1 : Hej2
                     HeaderOut<<" = "<<Member.GetDefaultValue();   
                 }
                 HeaderOut <<";\n";
-
             }         
+            HeaderOut<<"std::unique_ptr<AST_Base> Copy() const override{return(MBCC::CopyAST(*this));}\n";
             HeaderOut<<"\n};\n";
-            //If abstract class, write the containe class
+            //If abstract class, write the container class
             if(DepInfo.ChildrenMap[CurrentIndex].size() > 0)
             {
-                std::string ConcreteStructName = Grammar.Structs[CurrentIndex].Name;
-                HeaderOut << "class "<<ConcreteStructName;
-                HeaderOut<<"\n{\n";
-                HeaderOut<<"private:\n std::unique_ptr<"<<StructName<<"> m_Data;\nsize_t m_TypeID = 0;\n";
-                HeaderOut<<"template<typename T> static size_t p_GetTypeID(){return size_t(&p_GetTypeID<T>);}\n";
+                auto const& ContainerName = Grammar.Structs[CurrentIndex].Name;
+                std::string InheritName = "MBCC::PolyBase<"+StructName+">";
+                HeaderOut<<"class "<<Grammar.Structs[CurrentIndex].Name<< " : public "<< InheritName<<"\n{\n";
                 HeaderOut<<"public:\n";
-                HeaderOut<<"template<typename T> void Accept(T& Visitor);\n";
-                HeaderOut<<"template<typename T> void Accept(T& Visitor) const;\n";
-                HeaderOut<<"template<typename T> "<< ConcreteStructName<< "(T ObjectToStore)\n{\nm_Data = std::unique_ptr<"<<StructName<<">(new T(std::move(ObjectToStore)));\nm_TypeID = p_GetTypeID<T>();\n}\n";
-                HeaderOut<<ConcreteStructName << "() = default;\n";
-                HeaderOut<<ConcreteStructName << "("<<ConcreteStructName<<"&&) = default;\n";
-                HeaderOut<<"template<typename T> bool IsType() const\n{\nreturn m_TypeID == p_GetTypeID<T>();\n}\n";
-                HeaderOut<<"bool IsEmpty() const\n{\nreturn m_Data == nullptr;\n}\n";
-                HeaderOut<<"void operator=("<<ConcreteStructName<<"&& StructToMove)\n{\nstd::swap(m_TypeID,StructToMove.m_TypeID);\nstd::swap(m_Data,StructToMove.m_Data);\n}\n";
-                HeaderOut<<"template<typename T> T const& GetType() const\n{\nif(!IsType<T>() || m_Data == nullptr)\n{\nthrow std::runtime_error(\"Invalid type access for abstract AST class\");\n}return static_cast<T const&>(*m_Data);\n}\n";
-                HeaderOut<<"template<typename T> T& GetType()\n{\nif(!IsType<T>() || m_Data == nullptr)\n{\nthrow std::runtime_error(\"Invalid type access for abstract AST class\");\n}return static_cast<T&>(*m_Data);\n}\n";
-                HeaderOut<<StructName<<"& GetBase()\n{\nif(m_Data == nullptr)\n{\nthrow std::runtime_error(\"Invalid type access for abstract AST class: data is null\");\n}return static_cast<"<< StructName<<"&>(*m_Data);\n}\n";
-                HeaderOut<<StructName<<" const& GetBase() const\n{\nif(m_Data == nullptr)\n{\nthrow std::runtime_error(\"Invalid type access for abstract AST class: data is null\");\n}return static_cast<"<< StructName<<" const&>(*m_Data);\n}\n";
+                HeaderOut<<"typedef "<<InheritName<<" Base;\n";
+                HeaderOut<<"using Base::Base;\n";
+                //HeaderOut<<ContainerName<<"() = default";
+                //HeaderOut<<ContainerName<<"("<<ContainerName<<"&&) = default";
+                //HeaderOut<<ContainerName<<"("<<ContainerName<<" const& ObjectToCopy) = default";
+                //HeaderOut<<"template<typename T>\n"<<ContainerName<<"(T ObjectToStore) : PolyBase<"<<StructName<<">(ObjectToStore)\n{\n}\n";
+                //HeaderOut<<ContainerName<<"(std::unique_ptr<"<<StructName<<"> Data,int TypeID) : PolyBase<"<<StructName<<">(Data,TypeID)\n{\n}\n";
+                if(Grammar.Structs[CurrentIndex].ParentStruct != "")
+                {
+                    auto const& ParentName = Grammar.Structs[CurrentIndex].ParentStruct;
+                    //having a parent always means that that parent is polymorphic
+                    HeaderOut<<"operator "<<ParentName<<"()&&\n{\n";
+                    HeaderOut<<"return("<<ParentName<<"(std::move(m_Data),m_TypeID));\n}\n";
+                }
                 HeaderOut<<"\n};\n";
             }
         }
+        //Write GetTypeID
+        std::vector<int> BeginList = std::vector<int>(Grammar.Structs.size());
+        std::vector<int> EndList = std::vector<int>(Grammar.Structs.size());
+        int CurrentOffset = 0;
+        for(int CurrentStruct = 0; CurrentStruct < Grammar.Structs.size();CurrentStruct++)
+        {
+            if(Grammar.Structs[CurrentOffset].ParentStruct.empty())
+            {
+                CurrentOffset += h_UpdateInheritanceOrder(CurrentOffset,CurrentStruct,DepInfo,BeginList,EndList);
+            }
+        }
+        for(int CurrentStruct = 0; CurrentStruct < Grammar.Structs.size();CurrentStruct++)
+        {
+            std::string StructName = Grammar.Structs[CurrentStruct].Name;
+            if(DepInfo.ChildrenMap[CurrentStruct].size() != 0)
+            {
+                StructName += "_Base";   
+            }
+            HeaderOut<<"template<> inline int MBCC::GetTypeBegin<" << StructName <<">(){return("<<std::to_string(BeginList[CurrentStruct])<<");}\n";
+            HeaderOut<<"template<> inline int MBCC::GetTypeEnd<" << StructName <<">(){return("<<std::to_string(EndList[CurrentStruct])<<");}\n";
+        }
         for(auto const& AbstractStructIndex : AbstractStructs)
         { 
-            HeaderOut<<"template<typename T> void "<< Grammar.Structs[AbstractStructIndex].Name<<"::"<< "Accept(T& Visitor)"; 
-            HeaderOut << "\n{\n";
-            for(StructIndex ChildStruct : DepInfo.ChildrenMap[AbstractStructIndex])
-            {
-                HeaderOut<< "if(p_GetTypeID<"+Grammar.Structs[ChildStruct].Name+">() == m_TypeID)\n{\nVisitor(static_cast<"+Grammar.Structs[ChildStruct].Name+"&>(*m_Data));\n}\n";
-                HeaderOut<< "else ";
-            }
-            HeaderOut<< "\n{\nthrow std::runtime_error(\"Invalid object stored in AST abstract class\");\n}\n";
-            HeaderOut<< "\n}\n";
+            //HeaderOut<<"template<typename T> void "<< Grammar.Structs[AbstractStructIndex].Name<<"::"<< "Accept(T& Visitor)"; 
+            //HeaderOut << "\n{\n";
+            //for(StructIndex ChildStruct : DepInfo.ChildrenMap[AbstractStructIndex])
+            //{
+            //    HeaderOut<< "if(p_GetTypeID<"+Grammar.Structs[ChildStruct].Name+">() == m_TypeID)\n{\nVisitor(static_cast<"+Grammar.Structs[ChildStruct].Name+"&>(*m_Data));\n}\n";
+            //    HeaderOut<< "else ";
+            //}
+            //HeaderOut<< "\n{\nthrow std::runtime_error(\"Invalid object stored in AST abstract class\");\n}\n";
+            //HeaderOut<< "\n}\n";
 
 
-            HeaderOut<<"template<typename T> void "<< Grammar.Structs[AbstractStructIndex].Name<<"::"<< "Accept(T& Visitor) const"; 
-            HeaderOut << "\n{\n";
-            for(StructIndex ChildStruct : DepInfo.ChildrenMap[AbstractStructIndex])
-            {
-                HeaderOut<< "if(p_GetTypeID<"+Grammar.Structs[ChildStruct].Name+">() == m_TypeID)\n{\nVisitor(static_cast<"+Grammar.Structs[ChildStruct].Name+" const&>(*m_Data));\n}\n";
-                HeaderOut<< "else ";
-            }
-            HeaderOut<< "\n{\nthrow std::runtime_error(\"Invalid object stored in AST abstract class\");\n}\n";
-            HeaderOut<< "\n}\n";
+            //HeaderOut<<"template<typename T> void "<< Grammar.Structs[AbstractStructIndex].Name<<"::"<< "Accept(T& Visitor) const"; 
+            //HeaderOut << "\n{\n";
+            //for(StructIndex ChildStruct : DepInfo.ChildrenMap[AbstractStructIndex])
+            //{
+            //    HeaderOut<< "if(p_GetTypeID<"+Grammar.Structs[ChildStruct].Name+">() == m_TypeID)\n{\nVisitor(static_cast<"+Grammar.Structs[ChildStruct].Name+" const&>(*m_Data));\n}\n";
+            //    HeaderOut<< "else ";
+            //}
+            //HeaderOut<< "\n{\nthrow std::runtime_error(\"Invalid object stored in AST abstract class\");\n}\n";
+            //HeaderOut<< "\n}\n";
+
+
         } 
         //Write traverser
         //HeaderOut<<"template<typename T> class Traverser\n{\nprotected:\nT* m_Traveler = nullptr;";
