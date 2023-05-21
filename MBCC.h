@@ -12,6 +12,12 @@
 #include <deque>
 #include <MBUtility/MBMatrix.h>
 #include <set>
+
+
+
+
+#include <MBLSP/MBLSP.h>
+#include <MBLSP/SemanticTokens.h>
 namespace MBCC
 {
 
@@ -326,6 +332,47 @@ namespace MBCC
         //Would it be faster to use a matrix?
         std::vector<std::set<StructIndex>> ChildrenMap;
     };
+    
+    struct Identifier
+    {
+        std::string Value;
+        size_t ByteOffset;
+    };
+
+    enum class DefinitionsTokenType
+    {
+        Null,
+        Terminal,
+        NonTerminal,
+        Class,
+        Struct,
+        Keyword,
+        Variable,
+        SpecialToken,
+        String
+    };
+    struct DefinitionsToken
+    {
+        DefinitionsToken()
+        {
+               
+        }
+        DefinitionsToken(Identifier const& IdentifierToConvert,DefinitionsTokenType NewType)
+        {
+            ByteOffset = IdentifierToConvert.ByteOffset;
+            Length = IdentifierToConvert.Value.size();
+            Type = NewType;
+        }
+        size_t ByteOffset = 0;
+        int Length = 0;
+        DefinitionsTokenType Type = DefinitionsTokenType::Null;
+    };
+    struct LSPInfo
+    {
+        std::vector<MBLSP::Diagnostic> Diagnostics;
+        std::vector<DefinitionsToken> SemanticsTokens;
+        //begins?
+    };
     class MBCCDefinitions
     {
     private:
@@ -335,14 +382,16 @@ namespace MBCC
         void p_VerifyRules();
         void p_UpdateReferencesAndVerify();
 
-        static std::string p_ParseIdentifier(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
+
+        
+        static Identifier p_ParseIdentifier(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
         static SemanticAction p_ParseSemanticAction(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
-        static Terminal p_ParseTerminal(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
-        static std::pair<std::string,std::string> p_ParseDef(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
-        static StructMemberVariable p_ParseMemberVariable(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
-        static StructDefinition p_ParseStruct(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
-        static MemberExpression p_ParseMemberExpression(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
-        static std::vector<ParseRule> p_ParseParseRules(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
+        static Terminal p_ParseTerminal(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
+        static std::pair<std::string,std::string> p_ParseDef(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
+        static StructMemberVariable p_ParseMemberVariable(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
+        static StructDefinition p_ParseStruct(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
+        static MemberExpression p_ParseMemberExpression(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
+        static std::vector<ParseRule> p_ParseParseRules(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
 
         
 
@@ -361,10 +410,9 @@ namespace MBCC
         DependancyInfo DepInfo; 
         
         std::string SkipRegex;
-        NonTerminalIndex Start = -1;
 
         static MBCCDefinitions ParseDefinitions(const char* Data,size_t DataSize,size_t ParseOffset);
-        static MBCCDefinitions ParseDefinitions(const char* Data,size_t DataSize,size_t ParseOffset,std::string& OutError);
+        static MBCCDefinitions ParseDefinitions(const char* Data,size_t DataSize,size_t ParseOffset,LSPInfo& OutInfo);
 
         bool HasMember(StructDefinition const& StructDef,std::string const& Member);
         StructMemberVariable const* TryGetMember(StructDefinition const& StructDef,std::string const& Member) const;

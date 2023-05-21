@@ -131,12 +131,13 @@ namespace MBCC
             return(ErrorMessage.data());
         }
     };
-    std::string MBCCDefinitions::p_ParseIdentifier(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset)
+    Identifier MBCCDefinitions::p_ParseIdentifier(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset)
     {
-        std::string ReturnValue;
+        Identifier ReturnValue;
         size_t ParseOffset = InParseOffset;
         MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
         size_t StringBegin = ParseOffset;
+        ReturnValue.ByteOffset = StringBegin;
         while(ParseOffset < DataSize)
         {
             if(!((Data[ParseOffset] >= 65 && Data[ParseOffset] <= 90) || (Data[ParseOffset] >= 97 && Data[ParseOffset] <= 122)
@@ -146,8 +147,8 @@ namespace MBCC
             }   
             ParseOffset++;
         }
-        ReturnValue = std::string(Data+StringBegin,Data+ParseOffset);
-        if(ReturnValue == "")
+        ReturnValue.Value = std::string(Data+StringBegin,Data+ParseOffset);
+        if(ReturnValue.Value == "")
         {
             throw MBCCParseError("Syntactic error parsing MBCC definitions: empty identifiers are not allowed",ParseOffset);
         }
@@ -210,11 +211,13 @@ namespace MBCC
         *OutParseOffset = ParseOffset+1;
         return(ReturnValue);
     }
-    Terminal MBCCDefinitions::p_ParseTerminal(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset)
+    Terminal MBCCDefinitions::p_ParseTerminal(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo)
     {
         Terminal ReturnValue;  
         size_t ParseOffset = InParseOffset;
-        std::string TerminalName = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+        Identifier TerminalIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+        OutInfo.SemanticsTokens.push_back(DefinitionsToken(TerminalIdentifier,DefinitionsTokenType::Terminal));
+        std::string& TerminalName = TerminalIdentifier.Value;
         if(TerminalName == "")
         {
             throw MBCCParseError("Syntactic error parsing MBCC definitions: term needs non empty terminal name ",ParseOffset);
@@ -227,7 +230,12 @@ namespace MBCC
         ParseOffset+=1;
         MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
         MBError ParseStringResult = true;
+        DefinitionsToken NewToken;
+        NewToken.ByteOffset = ParseOffset;
         std::string RegexString = h_ParseRegex(Data,DataSize,ParseOffset,&ParseOffset,&ParseStringResult);
+        NewToken.Length = ParseOffset-NewToken.ByteOffset;
+        NewToken.Type = DefinitionsTokenType::String;
+        OutInfo.SemanticsTokens.push_back(NewToken);
         if(!ParseStringResult)
         {
             throw MBCCParseError("Syntactic error parsing MBCC definitions: error parsing quoted string for terminal definition: "+
@@ -248,7 +256,7 @@ namespace MBCC
         ReturnValue.RegexDefinition = RegexString;
         return(ReturnValue);
     }
-    StructMemberVariable MBCCDefinitions::p_ParseMemberVariable(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset)
+    StructMemberVariable MBCCDefinitions::p_ParseMemberVariable(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo)
     {
         StructMemberVariable ReturnValue;
         size_t ParseOffset = InParseOffset;
@@ -272,7 +280,9 @@ namespace MBCC
         }
         else
         {
-            std::string StructType = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset); 
+            Identifier StructTypeIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+            OutInfo.SemanticsTokens.push_back(DefinitionsToken(StructTypeIdentifier,DefinitionsTokenType::Class));
+            std::string& StructType = StructTypeIdentifier.Value;
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             if(ParseOffset >= DataSize)
             {
@@ -286,7 +296,9 @@ namespace MBCC
                 }
                 ParseOffset +=1;
                 StructMemberVariable_List List;
-                List.ListType = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+                Identifier ListTypeIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+                OutInfo.SemanticsTokens.push_back(DefinitionsToken(ListTypeIdentifier,DefinitionsTokenType::Class));
+                List.ListType = ListTypeIdentifier.Value;
                 MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
                 if(ParseOffset >= DataSize || Data[ParseOffset] != '>')
                 {
@@ -303,7 +315,9 @@ namespace MBCC
             }
         }
         MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
-        std::string MemberVariableName = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+        Identifier MemberVariableIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+        OutInfo.SemanticsTokens.push_back(DefinitionsToken(MemberVariableIdentifier,DefinitionsTokenType::Variable));
+        std::string MemberVariableName = MemberVariableIdentifier.Value;
         ReturnValue.GetName() = MemberVariableName;
         MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
         if(ParseOffset >= DataSize)
@@ -340,16 +354,20 @@ struct Hej1 : Hej2
     {RawValue} RawTest;
 }
     */
-    StructDefinition MBCCDefinitions::p_ParseStruct(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset)
+    StructDefinition MBCCDefinitions::p_ParseStruct(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo)
     {
         StructDefinition ReturnValue;
         size_t ParseOffset = InParseOffset; 
-        ReturnValue.Name = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+        Identifier NameIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+        OutInfo.SemanticsTokens.push_back(DefinitionsToken(NameIdentifier,DefinitionsTokenType::Class));
+        ReturnValue.Name = NameIdentifier.Value;
         MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
         if(ParseOffset < DataSize && Data[ParseOffset] == ':')
         {
             ParseOffset+=1;
-            ReturnValue.ParentStruct = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+            Identifier ParentIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+            OutInfo.SemanticsTokens.push_back(DefinitionsToken(ParentIdentifier,DefinitionsTokenType::Class));
+            ReturnValue.ParentStruct = ParentIdentifier.Value;
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
         }
         if(ParseOffset >= DataSize || Data[ParseOffset] != '{')
@@ -367,7 +385,7 @@ struct Hej1 : Hej2
                 ParseOffset+=1;
                 break;
             }      
-            ReturnValue.MemberVariables.push_back(p_ParseMemberVariable(Data,DataSize,ParseOffset,&ParseOffset));
+            ReturnValue.MemberVariables.push_back(p_ParseMemberVariable(Data,DataSize,ParseOffset,&ParseOffset,OutInfo));
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
         }
         if(!EndDelimiterFound)
@@ -377,11 +395,13 @@ struct Hej1 : Hej2
         *OutParseOffset = ParseOffset;
         return(ReturnValue); 
     }
-    std::pair<std::string,std::string> MBCCDefinitions::p_ParseDef(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset)
+    std::pair<std::string,std::string> MBCCDefinitions::p_ParseDef(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo)
     {
         std::pair<std::string,std::string> ReturnValue; 
         size_t ParseOffset = InParseOffset;
-        std::string RuleName = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+        Identifier RuleIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+        OutInfo.SemanticsTokens.push_back(DefinitionsToken(RuleIdentifier,DefinitionsTokenType::NonTerminal));
+        std::string RuleName = RuleIdentifier.Value;
         if(RuleName == "")
         {
             throw MBCCParseError("Syntactic error parsing MBCC definitions: def needs non empty rule name ",ParseOffset);
@@ -393,7 +413,9 @@ struct Hej1 : Hej2
         }
         ParseOffset+=1;
         MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
-        std::string StructName = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+        Identifier StructIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+        OutInfo.SemanticsTokens.push_back(DefinitionsToken(StructIdentifier,DefinitionsTokenType::Struct));
+        std::string StructName = StructIdentifier.Value;
         if(StructName == "")
         {
             throw MBCCParseError("Syntactic error parsing MBCC definitions: def needs non empty struct name ",ParseOffset);
@@ -454,13 +476,22 @@ struct Hej1 : Hej2
     //    }
     //    return(ReturnValue);
     //}
-    MemberExpression MBCCDefinitions::p_ParseMemberExpression(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset)
+    MemberExpression MBCCDefinitions::p_ParseMemberExpression(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo)
     {
         MemberExpression ReturnValue;
         size_t ParseOffset = InParseOffset;
         while(ParseOffset < DataSize)
         {
-            std::string NewPart = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+            Identifier PartIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+            if(ReturnValue.Names.size() == 0)
+            {
+                OutInfo.SemanticsTokens.push_back(DefinitionsToken(PartIdentifier,DefinitionsTokenType::NonTerminal));   
+            }
+            else 
+            {
+                OutInfo.SemanticsTokens.push_back(DefinitionsToken(PartIdentifier,DefinitionsTokenType::Variable));   
+            }
+            std::string NewPart = PartIdentifier.Value;
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             ReturnValue.Names.push_back(std::move(NewPart));
             ReturnValue.PartTypes.push_back(-1);
@@ -480,7 +511,7 @@ struct Hej1 : Hej2
         *OutParseOffset = ParseOffset;
         return(ReturnValue);
     }
-    std::vector<ParseRule> MBCCDefinitions::p_ParseParseRules(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset)
+    std::vector<ParseRule> MBCCDefinitions::p_ParseParseRules(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo)
     {
         std::vector<ParseRule> ReturnValue;
         size_t ParseOffset = InParseOffset;
@@ -526,7 +557,7 @@ struct Hej1 : Hej2
             //    NewComponent.AssignOrder = p_ParseAssignOrder(Data,DataSize,ParseOffset,&ParseOffset);
             //    MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             //}
-            MemberExpression RuleExpression = p_ParseMemberExpression(Data,DataSize,ParseOffset,&ParseOffset);    
+            MemberExpression RuleExpression = p_ParseMemberExpression(Data,DataSize,ParseOffset,&ParseOffset,OutInfo);    
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             if(ParseOffset >= DataSize)
             {
@@ -537,7 +568,7 @@ struct Hej1 : Hej2
                 //member assignment    
                 ParseOffset += 1;
                 NewComponent.AssignedMember = std::move(RuleExpression);
-                RuleExpression = p_ParseMemberExpression(Data,DataSize,ParseOffset,&ParseOffset);
+                RuleExpression = p_ParseMemberExpression(Data,DataSize,ParseOffset,&ParseOffset,OutInfo);
                 MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             }
             else
@@ -1189,7 +1220,7 @@ struct Hej1 : Hej2
         p_VerifyStructs();
         p_VerifyRules();
     }
-    MBCCDefinitions MBCCDefinitions::ParseDefinitions(const char* Data,size_t DataSize,size_t InOffset)
+    MBCCDefinitions MBCCDefinitions::ParseDefinitions(const char* Data,size_t DataSize,size_t InOffset,LSPInfo& OutInfo)
     {
         MBCCDefinitions ReturnValue; 
         size_t ParseOffset = InOffset; 
@@ -1197,15 +1228,17 @@ struct Hej1 : Hej2
         std::vector<std::pair<std::string,std::string>> UnresolvedDefs;
         while(ParseOffset < DataSize)
         {
-            std::string CurrentIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
-            if(CurrentIdentifier == "def")
+            Identifier CurrentIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+            if(CurrentIdentifier.Value == "def")
             {
-                auto NewDef = p_ParseDef(Data,DataSize,ParseOffset,&ParseOffset); 
+                OutInfo.SemanticsTokens.push_back(DefinitionsToken(CurrentIdentifier,DefinitionsTokenType::Keyword));
+                auto NewDef = p_ParseDef(Data,DataSize,ParseOffset,&ParseOffset,OutInfo); 
                 UnresolvedDefs.push_back(NewDef);
             }
-            else if(CurrentIdentifier == "term")
+            else if(CurrentIdentifier.Value == "term")
             {
-                Terminal NewTerminal = p_ParseTerminal(Data,DataSize,ParseOffset,&ParseOffset);
+                OutInfo.SemanticsTokens.push_back(DefinitionsToken(CurrentIdentifier,DefinitionsTokenType::Keyword));
+                Terminal NewTerminal = p_ParseTerminal(Data,DataSize,ParseOffset,&ParseOffset,OutInfo);
                 if(ReturnValue.NameToTerminal.find(NewTerminal.Name) != ReturnValue.NameToTerminal.end())
                 {
                     throw std::runtime_error("Semantic error parsing MBCC definitions: duplicate definition for terminal \""+NewTerminal.Name+"\"");
@@ -1219,9 +1252,10 @@ struct Hej1 : Hej2
                 ReturnValue.Terminals.push_back(std::move(NewTerminal));
 
             }
-            else if(CurrentIdentifier == "struct")
+            else if(CurrentIdentifier.Value == "struct")
             {
-                StructDefinition NewStruct = p_ParseStruct(Data,DataSize,ParseOffset,&ParseOffset);
+                OutInfo.SemanticsTokens.push_back(DefinitionsToken(CurrentIdentifier,DefinitionsTokenType::Struct));
+                StructDefinition NewStruct = p_ParseStruct(Data,DataSize,ParseOffset,&ParseOffset,OutInfo);
                 if(ReturnValue.NameToStruct.find(NewStruct.Name) != ReturnValue.NameToStruct.end())
                 {
                     throw std::runtime_error("Semantic error parsing MBCC definitions: duplicate definition for struct \""+NewStruct.Name+"\"");
@@ -1230,15 +1264,21 @@ struct Hej1 : Hej2
                 ReturnValue.NameToStruct[NewStruct.Name] = StructIndex;
                 ReturnValue.Structs.push_back(std::move(NewStruct));
             }
-            else if(CurrentIdentifier == "skip")
+            else if(CurrentIdentifier.Value == "skip")
             {
+                OutInfo.SemanticsTokens.push_back(DefinitionsToken(CurrentIdentifier,DefinitionsTokenType::Keyword));
                 if(ReturnValue.SkipRegex != "")
                 {
                     throw std::runtime_error("Semantic error parsing MBCC definitions: there can only be one skip regex");   
                 }
                 MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
+                DefinitionsToken NewToken;
+                NewToken.ByteOffset = ParseOffset;
                 MBError ParseError = true;
                 ReturnValue.SkipRegex = h_ParseRegex(Data,DataSize,ParseOffset,&ParseOffset,&ParseError);
+                NewToken.Length = ParseOffset-NewToken.ByteOffset;
+                NewToken.Type = DefinitionsTokenType::String;
+                OutInfo.SemanticsTokens.push_back(NewToken);
                 if(!ParseError)
                 {
                     throw std::runtime_error("Syntax error parsing MBCC definitions: Error parsing skip statement: "+ParseError.ErrorMessage);
@@ -1252,10 +1292,10 @@ struct Hej1 : Hej2
             }
             else
             {
-                std::vector<ParseRule> NewRules = p_ParseParseRules(Data,DataSize,ParseOffset,&ParseOffset);
+                std::vector<ParseRule> NewRules = p_ParseParseRules(Data,DataSize,ParseOffset,&ParseOffset,OutInfo);
                 NonTerminal NewTerminal;
                 NewTerminal.Rules = std::move(NewRules);
-                NewTerminal.Name = CurrentIdentifier;
+                NewTerminal.Name = CurrentIdentifier.Value;
                 auto NonTermIt = ReturnValue.NameToNonTerminal.find(NewTerminal.Name); 
                 if(NonTermIt != ReturnValue.NameToNonTerminal.end())
                 {
@@ -1307,22 +1347,21 @@ struct Hej1 : Hej2
         }
         return(ReturnValue);
     }
-    MBCCDefinitions MBCCDefinitions::ParseDefinitions(const char* Data,size_t DataSize,size_t ParseOffset,std::string& OutError)
+    MBCCDefinitions MBCCDefinitions::ParseDefinitions(const char* Data,size_t DataSize,size_t ParseOffset)
     {
         MBCCDefinitions ReturnValue; 
-        OutError = "";
-        try
-        {
-            ReturnValue = ParseDefinitions(Data,DataSize,ParseOffset); 
-        }
-        catch(MBCCParseError const& Exception)
-        {
-            OutError ="Error at line " +std::to_string(h_OffsetToLine(Data,Exception.ParseOffset))+" "+ Exception.ErrorMessage;
-        }
-        catch(std::exception const& e)
-        {
-            OutError = e.what(); 
-        }
+        LSPInfo OutInfo;
+        ReturnValue = ParseDefinitions(Data,DataSize,ParseOffset,OutInfo); 
+        //catch(MBCCParseError const& Exception)
+        //{
+        //    MBLSP::Diagnostic NeWDiagnostic;
+        //    NeWDiagnostic.message = "Error at line " +std::to_string(h_OffsetToLine(Data,Exception.ParseOffset))+" "+ Exception.ErrorMessage;
+        //}
+        //catch(std::exception const& e)
+        //{
+        //    MBLSP::Diagnostic NeWDiagnostic;
+        //    //OutError = e.what(); 
+        //}
         return(ReturnValue);
     }
     //END MBCCDefinitions
