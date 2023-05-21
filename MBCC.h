@@ -18,6 +18,8 @@
 
 #include <MBLSP/MBLSP.h>
 #include <MBLSP/SemanticTokens.h>
+
+#include <assert.h>
 namespace MBCC
 {
 
@@ -142,11 +144,14 @@ namespace MBCC
     public:
         std::string Name; 
         std::string DefaultValue;
+        size_t BeginOffset = 0;
+        size_t DefaultValueByteOffset = 0;
     };
     class StructMemberVariable_List : public MemberVariable
     {
     public:
         std::string ListType;
+        size_t ListByteOffset = 0;
     };
     class StructMemberVariable_Raw : public MemberVariable
     {
@@ -198,6 +203,27 @@ namespace MBCC
         std::string& GetDefaultValue();
         std::string const& GetName() const;
         std::string const& GetDefaultValue() const;
+
+        MemberVariable& GetBase()
+        {
+            MemberVariable* Result = nullptr;    
+            std::visit([&](MemberVariable& var)
+                    {
+                        Result = &var;
+                    },m_Content);
+            assert(Result != nullptr && "std::variant should always be initialised with base of type MemberVariable");
+            return(*Result);
+        }
+        MemberVariable const& GetBase() const
+        {
+            MemberVariable const* Result = nullptr;    
+            std::visit([&](MemberVariable const& var)
+                    {
+                        Result = &var;
+                    },m_Content);
+            assert(Result != nullptr && "std::variant should always be initialised with base of type MemberVariable");
+            return(*Result);
+        }
         template<typename T>
         bool IsType() const
         {
@@ -213,6 +239,17 @@ namespace MBCC
         {
             return(std::get<T>(m_Content)); 
         }
+        template<typename T>
+        void Visit(T Visitor)
+        {
+            std::visit(Visitor,m_Content);
+        }
+        template<typename T>
+        void Visit(T Visitor) const
+        {
+            std::visit(Visitor,m_Content);
+        }
+
         void Accept(MemberVariableVisitor& Visitor);
     };
     class MemberVariableVisitor
@@ -227,8 +264,10 @@ namespace MBCC
     };
     struct StructDefinition
     {
+        size_t StructBegin = 0;
         std::string Name; 
         std::string ParentStruct;
+        size_t ParentOffset = 0;
         std::vector<StructMemberVariable> MemberVariables;
         //bool HasMember(std::string const& MemberToCheck) const;
         //StructMemberVariable const& GetMember(std::string const& MemberName) const;
@@ -349,6 +388,8 @@ namespace MBCC
         Rule,
         Keyword,
         Variable,
+        AssignedRHS,
+        AssignedLHS,
         String
     };
     struct DefinitionsToken
@@ -363,14 +404,40 @@ namespace MBCC
             Length = IdentifierToConvert.Value.size();
             Type = NewType;
         }
+        bool operator<(DefinitionsToken const& rhs) const
+        {
+            return(ByteOffset < rhs.ByteOffset);
+        }
         size_t ByteOffset = 0;
         int Length = 0;
         DefinitionsTokenType Type = DefinitionsTokenType::Null;
     };
+    struct Diagnostic
+    {
+        size_t ByteOffset = 0;   
+        size_t Length = 0;
+        std::string Message;
+        Diagnostic() = default;
+        Diagnostic(size_t NewByteOffset,size_t NewLength,std::string NewMessage)
+        {
+            ByteOffset = NewByteOffset;   
+            Length = NewLength;
+            Message = std::move(NewMessage);
+        }
+        Diagnostic(Identifier AssociatedIdentifier,std::string NewMessage)
+        {
+            ByteOffset =  AssociatedIdentifier.ByteOffset;
+            Length = AssociatedIdentifier.Value.size();
+            Message = std::move(NewMessage);
+        }
+    };
     struct LSPInfo
     {
-        std::vector<MBLSP::Diagnostic> Diagnostics;
+        std::vector<Diagnostic> Diagnostics;
         std::vector<DefinitionsToken> SemanticsTokens;
+        std::unordered_map<std::string,size_t> StructureDefinitions;
+        std::unordered_map<std::string,size_t> TerminalDefinitions;
+        std::unordered_map<std::string,size_t> NonTerminalDefinitions;
         //begins?
     };
     class MBCCParseError : public std::exception
@@ -391,18 +458,18 @@ namespace MBCC
     class MBCCDefinitions
     {
     private:
-        void p_VerifyStructs();
+        void p_VerifyStructs(LSPInfo& OutInfo);
         //MEGA ugly, refactor
-        void p_VerifyComponent(RuleComponent& ComponentToVerify,std::string const& NonTerminalName,StructDefinition const* AssociatedStruct,bool& ThisAssignment,bool& RegularAssignment);
-        void p_VerifyRules();
-        void p_UpdateReferencesAndVerify();
+        void p_VerifyComponent(RuleComponent& ComponentToVerify,std::string const& NonTerminalName,StructDefinition const* AssociatedStruct,bool& ThisAssignment,bool& RegularAssignment,LSPInfo& OutInfo);
+        void p_VerifyRules(LSPInfo& OutInfo);
+        void p_UpdateReferencesAndVerify(LSPInfo& OutInfo);
 
 
         
         static Identifier p_ParseIdentifier(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
         static SemanticAction p_ParseSemanticAction(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset);
         static Terminal p_ParseTerminal(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
-        static std::pair<std::string,std::string> p_ParseDef(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
+        static std::pair<Identifier,Identifier> p_ParseDef(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
         static StructMemberVariable p_ParseMemberVariable(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
         static StructDefinition p_ParseStruct(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
         static MemberExpression p_ParseMemberExpression(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);

@@ -250,6 +250,7 @@ namespace MBCC
         {
             throw MBCCParseError("Syntactic error parsing MBCC definitions: end of file before member variable definition or end of struct",ParseOffset);   
         }
+        size_t StructBeginOffset = ParseOffset;
         if(Data[ParseOffset] == '{')
         {
             ParseOffset+=1;    
@@ -282,6 +283,7 @@ namespace MBCC
                 ParseOffset +=1;
                 StructMemberVariable_List List;
                 Identifier ListTypeIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+                List.ListByteOffset = ListTypeIdentifier.ByteOffset;
                 OutInfo.SemanticsTokens.push_back(DefinitionsToken(ListTypeIdentifier,DefinitionsTokenType::Class));
                 List.ListType = ListTypeIdentifier.Value;
                 MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
@@ -316,6 +318,11 @@ namespace MBCC
         else if(Data[ParseOffset] == '=')
         {
             ParseOffset +=1;
+            //ReturnValue.GetType<MemberVariable>().DefaultValueByteOffset = ParseOffset;
+            ReturnValue.Visit([&](MemberVariable& var)
+                    {
+                        var.DefaultValueByteOffset = ParseOffset;
+                    });
             //A little bit of a hack, but doesnt require the parsing of any particular data
             size_t ValueEnd = std::find(Data+ParseOffset,Data+DataSize,';')-Data;
             if(ValueEnd >= DataSize)
@@ -330,6 +337,11 @@ namespace MBCC
             throw MBCCParseError("Syntactic error parsing MBCC definitions: member variable needs delimiting ;",ParseOffset);   
         }
         *OutParseOffset = ParseOffset;
+        //ReturnValue.GetType<MemberVariable>().BeginOffset = StructBeginOffset;
+        ReturnValue.Visit([&](MemberVariable& var)
+                {
+                    var.BeginOffset = StructBeginOffset;
+                });
         return(ReturnValue);
     }
     /*
@@ -343,6 +355,7 @@ struct Hej1 : Hej2
     {
         StructDefinition ReturnValue;
         size_t ParseOffset = InParseOffset; 
+        ReturnValue.StructBegin = ParseOffset;
         Identifier NameIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
         OutInfo.SemanticsTokens.push_back(DefinitionsToken(NameIdentifier,DefinitionsTokenType::Class));
         ReturnValue.Name = NameIdentifier.Value;
@@ -353,6 +366,7 @@ struct Hej1 : Hej2
             Identifier ParentIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
             OutInfo.SemanticsTokens.push_back(DefinitionsToken(ParentIdentifier,DefinitionsTokenType::Class));
             ReturnValue.ParentStruct = ParentIdentifier.Value;
+            ReturnValue.ParentOffset = ParentIdentifier.ByteOffset;
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
         }
         if(ParseOffset >= DataSize || Data[ParseOffset] != '{')
@@ -380,9 +394,9 @@ struct Hej1 : Hej2
         *OutParseOffset = ParseOffset;
         return(ReturnValue); 
     }
-    std::pair<std::string,std::string> MBCCDefinitions::p_ParseDef(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo)
+    std::pair<Identifier,Identifier> MBCCDefinitions::p_ParseDef(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo)
     {
-        std::pair<std::string,std::string> ReturnValue; 
+        std::pair<Identifier,Identifier> ReturnValue; 
         size_t ParseOffset = InParseOffset;
         Identifier RuleIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
         OutInfo.SemanticsTokens.push_back(DefinitionsToken(RuleIdentifier,DefinitionsTokenType::NonTerminal));
@@ -412,8 +426,8 @@ struct Hej1 : Hej2
         }
         ParseOffset+=1;
         *OutParseOffset = ParseOffset;
-        ReturnValue.first = RuleName;
-        ReturnValue.second = StructName;
+        ReturnValue.first = RuleIdentifier;
+        ReturnValue.second = StructIdentifier;
         return(ReturnValue);
     }
     SemanticAction MBCCDefinitions::p_ParseSemanticAction(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset)
@@ -586,7 +600,7 @@ struct Hej1 : Hej2
                     DefinitionsToken NewToken;
                     NewToken.ByteOffset = RuleExpression.ByteOffset[i];
                     NewToken.Length = RuleExpression.Names[i].size();
-                    NewToken.Type = DefinitionsTokenType::Variable;
+                    NewToken.Type = DefinitionsTokenType::AssignedRHS;
                     OutInfo.SemanticsTokens.push_back(NewToken);
                 }
             }
@@ -595,7 +609,7 @@ struct Hej1 : Hej2
                 DefinitionsToken NewToken;
                 NewToken.ByteOffset = NewComponent.AssignedMember.ByteOffset[i];
                 NewToken.Length = NewComponent.AssignedMember.Names[i].size();
-                NewToken.Type = DefinitionsTokenType::Variable;
+                NewToken.Type = DefinitionsTokenType::AssignedLHS;
                 OutInfo.SemanticsTokens.push_back(NewToken);
             }
             if(ParseOffset >= DataSize)
@@ -685,14 +699,15 @@ struct Hej1 : Hej2
         }
         return(ReturnValue);
     }
-    void MBCCDefinitions::p_VerifyStructs()
+    void MBCCDefinitions::p_VerifyStructs(LSPInfo& OutInfo)
     {
         for(auto& Struct : Structs)
         {
             //Verify that the parent struct actually exists    
             if(Struct.ParentStruct != "" && NameToStruct.find(Struct.Name) == NameToStruct.end())
             {
-                throw std::runtime_error("Semantic error parsing MBCC definitions: struct named \""+Struct.Name+"\" is the child of a non existing struct named \""+Struct.ParentStruct+"\"");
+                OutInfo.Diagnostics.push_back(Diagnostic(Struct.ParentOffset,Struct.ParentStruct.size(),
+                            "struct named \""+Struct.Name+"\" is the child of a non existing struct named \""+Struct.ParentStruct+"\""));
             } 
             for(auto& MemberVariable : Struct.MemberVariables)
             {
@@ -700,8 +715,10 @@ struct Hej1 : Hej2
                 {
                     if(!h_TypeIsBuiltin(MemberVariable.GetType<StructMemberVariable_List>().ListType) && NameToStruct.find(MemberVariable.GetType<StructMemberVariable_List>().ListType) == NameToStruct.end())
                     {
-                        throw std::runtime_error("Semantic error parsing MBCC definitions: List template value in struct \""+Struct.Name+ "\"references unknowns struct named \""+
-                                MemberVariable.GetType<StructMemberVariable_List>().ListType+"\"");
+                        OutInfo.Diagnostics.push_back(Diagnostic(MemberVariable.GetType<StructMemberVariable_List>().ListByteOffset,
+                                    MemberVariable.GetType<StructMemberVariable_List>().ListType.size(),
+                                    "List template value in struct \""+Struct.Name+ "\"references unknowns struct named \""+
+                        MemberVariable.GetType<StructMemberVariable_List>().ListType+"\""));
                     }
                 }
                 else if(MemberVariable.IsType<StructMemberVariable_Struct>())
@@ -714,6 +731,8 @@ struct Hej1 : Hej2
                             StructMemberVariable_Int NewMember;
                             NewMember.Name = MemberVariable.GetName();
                             NewMember.DefaultValue = MemberVariable.GetDefaultValue();
+                            NewMember.BeginOffset = MemberVariable.GetBase().BeginOffset;
+                            NewMember.DefaultValueByteOffset = MemberVariable.GetBase().DefaultValueByteOffset;
                             if(NewMember.DefaultValue != "")
                             {
                                 try
@@ -722,7 +741,10 @@ struct Hej1 : Hej2
                                 }
                                 catch(std::exception const& e)
                                 {
-                                    throw std::runtime_error("Semantic error parsing MBCC definitions: Int member variable not a valid integer");
+                                    OutInfo.Diagnostics.push_back(Diagnostic(
+                                              MemberVariable.GetType<StructMemberVariable_Struct>().DefaultValueByteOffset,
+                                              MemberVariable.GetType<StructMemberVariable_Struct>().DefaultValue.size(),
+                                              "Int member variable not a valid integer"));
                                 }
                             }
                             MemberVariable = StructMemberVariable(NewMember);
@@ -733,6 +755,8 @@ struct Hej1 : Hej2
                             NewMember.Value = MemberVariable.GetDefaultValue();
                             NewMember.DefaultValue = MemberVariable.GetDefaultValue();
                             NewMember.Name = MemberVariable.GetName();
+                            NewMember.BeginOffset = MemberVariable.GetBase().BeginOffset;
+                            NewMember.DefaultValueByteOffset = MemberVariable.GetBase().DefaultValueByteOffset;
                             MemberVariable = StructMemberVariable(NewMember);
                                
                         }
@@ -741,6 +765,8 @@ struct Hej1 : Hej2
                             StructMemberVariable_Bool NewMember;   
                             NewMember.DefaultValue = MemberVariable.GetDefaultValue();
                             NewMember.Name = MemberVariable.GetName();
+                            NewMember.BeginOffset = MemberVariable.GetBase().BeginOffset;
+                            NewMember.DefaultValueByteOffset = MemberVariable.GetBase().DefaultValueByteOffset;
                             if(NewMember.DefaultValue != "")
                             {
                                 size_t Offset = 0;
@@ -755,7 +781,10 @@ struct Hej1 : Hej2
                                 }
                                 else
                                 {
-                                    throw std::runtime_error("Semantic error parsing MBCC definitions: invalid default value for bool type: "+NewMember.DefaultValue);   
+                                    OutInfo.Diagnostics.push_back(Diagnostic(
+                                              MemberVariable.GetType<StructMemberVariable_Struct>().DefaultValueByteOffset,
+                                              MemberVariable.GetType<StructMemberVariable_Struct>().DefaultValue.size(),
+                                              "invalid default value for bool type: "+NewMember.DefaultValue));
                                 }
                             }
                             MemberVariable = StructMemberVariable(NewMember);
@@ -765,22 +794,33 @@ struct Hej1 : Hej2
                             StructMemberVariable_tokenPosition NewMember;   
                             NewMember.DefaultValue = MemberVariable.GetDefaultValue();
                             NewMember.Name = MemberVariable.GetName();
+                            NewMember.BeginOffset = MemberVariable.GetBase().BeginOffset;
+                            NewMember.DefaultValueByteOffset = MemberVariable.GetBase().DefaultValueByteOffset;
                             if(NewMember.DefaultValue != "")
                             {
-                                throw std::runtime_error("Semantic error parsing MBCC definitions: tokenPos cannot have a default type");
+                                OutInfo.Diagnostics.push_back(Diagnostic(
+                                              MemberVariable.GetType<StructMemberVariable_Struct>().DefaultValueByteOffset,
+                                              MemberVariable.GetType<StructMemberVariable_Struct>().DefaultValue.size(),
+                                              "tokenPos cannot have a default type"));
                             }
                             MemberVariable = std::move(NewMember);
                         }
                     }
                     else if(NameToStruct.find(MemberVariable.GetType<StructMemberVariable_Struct>().StructType) == NameToStruct.end())
                     {
-                        throw std::runtime_error("Semantic error parsing MBCC definitions: member variable in struct \""+Struct.Name+"\" refernces unknowns struct named \""+
-                                MemberVariable.GetType<StructMemberVariable_Struct>().StructType+"\"");
+                        OutInfo.Diagnostics.push_back(Diagnostic(
+                                      MemberVariable.GetType<StructMemberVariable_Struct>().BeginOffset,
+                                      MemberVariable.GetType<StructMemberVariable_Struct>().StructType.size(),
+                                      "member variable in struct \""+Struct.Name+"\" refernces unknowns struct named \""+
+                                MemberVariable.GetType<StructMemberVariable_Struct>().StructType+"\""));
                     }
                 }
             }
         }
-        DepInfo = CalculateDependancyInfo(*this);
+        if(OutInfo.Diagnostics.size() == 0)
+        {
+            DepInfo = CalculateDependancyInfo(*this);
+        }
     }
     //Assumption: Structs are valid
     bool MBCCDefinitions::HasMember(StructDefinition const& StructDef,std::string const& MemberName)
@@ -1141,7 +1181,7 @@ struct Hej1 : Hej2
 
         return(ReturnValue);
     }
-    void MBCCDefinitions::p_VerifyRules()
+    void MBCCDefinitions::p_VerifyRules(LSPInfo& OutInfo)
     {
         for(auto& NonTerminal : NonTerminals)
         {
@@ -1157,11 +1197,11 @@ struct Hej1 : Hej2
                 bool HasRegularAssignment = false;
                 for(auto& Component : Rule.Components)
                 {
-                    p_VerifyComponent(Component,NonTerminal.Name,AssociatedStruct,HasThisAssignment,HasRegularAssignment);
+                    p_VerifyComponent(Component,NonTerminal.Name,AssociatedStruct,HasThisAssignment,HasRegularAssignment,OutInfo);
                 }
                 for (auto& Component : Rule.MetaComponents)
                 {
-                    p_VerifyComponent(Component.second, NonTerminal.Name, AssociatedStruct, HasThisAssignment, HasRegularAssignment);
+                    p_VerifyComponent(Component.second, NonTerminal.Name, AssociatedStruct, HasThisAssignment, HasRegularAssignment,OutInfo);
                 }
                 if (HasRegularAssignment && HasThisAssignment)
                 {
@@ -1170,7 +1210,7 @@ struct Hej1 : Hej2
             }
         } 
     }
-    void MBCCDefinitions::p_VerifyComponent(RuleComponent& Component,std::string const& NonTermName,StructDefinition const* AssociatedStruct,bool& HasThisAssignment,bool& HasRegularAssignment)
+    void MBCCDefinitions::p_VerifyComponent(RuleComponent& Component,std::string const& NonTermName,StructDefinition const* AssociatedStruct,bool& HasThisAssignment,bool& HasRegularAssignment,LSPInfo& OutInfo)
     {
         if(Component.ReferencedRule.Names[0] == "TOKEN")
         {
@@ -1182,9 +1222,9 @@ struct Hej1 : Hej2
             Component.ComponentIndex = TermIt->second;
             if(Component.ReferencedRule.Names.size() > 1)
             {
-                throw std::runtime_error("Semantic error parsing MBCC definitions: "
+                OutInfo.Diagnostics.push_back(Diagnostic(Component.ReferencedRule.ByteOffset[0],Component.ReferencedRule.Names[0].size(),
                         "terminal \""+Component.ReferencedRule.Names[0] + "\" has no member "
-                        " \""+Component.ReferencedRule.Names[1]+"\"");
+                        " \""+Component.ReferencedRule.Names[1]+"\""));
             }
         }   
         else if(auto NonTermIt = NameToNonTerminal.find(Component.ReferencedRule.Names[0]); NonTermIt != NameToNonTerminal.end())
@@ -1195,16 +1235,20 @@ struct Hej1 : Hej2
             {
                 if(NonTerminals[NonTermIt->second].AssociatedStruct == -1)
                 {
-                    throw std::runtime_error("Semantic error parsing MBCC definitions: "
-                            "assignment in non-terminal"+NonTermName +" but non-terminal doesn't have an associated struct");
+                    OutInfo.Diagnostics.push_back(Diagnostic(Component.ReferencedRule.ByteOffset[0],Component.ReferencedRule.Names[0].size(),
+                            "assignment in non-terminal"+NonTermName +" but non-terminal doesn't have an associated struct"));
                 }
             }
         }
         else
         {
-            throw std::runtime_error("Semantic error parsing MBCC definitions: "
+            OutInfo.Diagnostics.push_back(Diagnostic(Component.ReferencedRule.ByteOffset[0],Component.ReferencedRule.Names[0].size(),
                     "rule referencing unkown terminal/non-terminal named"
-                    " \""+Component.ReferencedRule.Names[0]+"\"");
+                    " \""+Component.ReferencedRule.Names[0]+"\""));
+        }
+        if(OutInfo.Diagnostics.size() != 0)
+        {
+            return;
         }
         if(AssociatedStruct != nullptr)
         {
@@ -1223,29 +1267,36 @@ struct Hej1 : Hej2
             std::string Error;
             if(!p_IsAssignable(*AssociatedStruct,Component.AssignedMember,Component.ReferencedRule,Component.Max,Error))
             {
-                throw std::runtime_error("Semantic error parsing MBCC definitions: Error in assignment of non terminal \""+NonTermName+"\": "
+                OutInfo.Diagnostics.push_back(Diagnostic(Component.ReferencedRule.ByteOffset[0],Component.ReferencedRule.Names[0].size(),
+                        "Error in assignment of non terminal \""+NonTermName+"\": "
                         "Error in assignment to member \""+Component.AssignedMember.Names[0]+"\": "
-                        +Error);
+                        +Error));
             }
         }
     }
     //Parse def already verifies that all links between struct and non-terminal/terminal is true
     //here we only have to verify wheter or not the parse rules and structures abide by the semantics
-    void MBCCDefinitions::p_UpdateReferencesAndVerify()
+    void MBCCDefinitions::p_UpdateReferencesAndVerify(LSPInfo& OutInfo)
     {
         if(NonTerminals.size() == 0)
         {
-            throw std::runtime_error("Semantic error parsing MBCC definitions: cannot construct a parser without any nonterminals");
+            OutInfo.Diagnostics.push_back(Diagnostic(0,5,"Skip regex is mandatory in order to construct tokenizer"));
         }
-        p_VerifyStructs();
-        p_VerifyRules();
+        if(OutInfo.Diagnostics.size() == 0)
+        {
+            p_VerifyStructs(OutInfo);
+            if(OutInfo.Diagnostics.size() == 0)
+            {
+                p_VerifyRules(OutInfo);
+            }
+        }
     }
     MBCCDefinitions MBCCDefinitions::ParseDefinitions(const char* Data,size_t DataSize,size_t InOffset,LSPInfo& OutInfo)
     {
         MBCCDefinitions ReturnValue; 
         size_t ParseOffset = InOffset; 
         MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
-        std::vector<std::pair<std::string,std::string>> UnresolvedDefs;
+        std::vector<std::pair<Identifier,Identifier>> UnresolvedDefs;
         while(ParseOffset < DataSize)
         {
             Identifier CurrentIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
@@ -1261,15 +1312,19 @@ struct Hej1 : Hej2
                 Terminal NewTerminal = p_ParseTerminal(Data,DataSize,ParseOffset,&ParseOffset,OutInfo);
                 if(ReturnValue.NameToTerminal.find(NewTerminal.Name) != ReturnValue.NameToTerminal.end())
                 {
-                    throw std::runtime_error("Semantic error parsing MBCC definitions: duplicate definition for terminal \""+NewTerminal.Name+"\"");
+                    OutInfo.Diagnostics.push_back(Diagnostic(CurrentIdentifier,"duplicate definition for terminal \""+NewTerminal.Name+"\""));
                 }
-                if(ReturnValue.NameToNonTerminal.find(NewTerminal.Name) != ReturnValue.NameToNonTerminal.end())
+                else if(ReturnValue.NameToNonTerminal.find(NewTerminal.Name) != ReturnValue.NameToNonTerminal.end())
                 {
-                    throw std::runtime_error("Semantic error parsing MBCC definitions: attempting to define terminal with the same name as a nonterminal named \""+NewTerminal.Name+"\"");
+                    OutInfo.Diagnostics.push_back(Diagnostic(CurrentIdentifier,"attempting to define terminal with the same name as a nonterminal named \""+NewTerminal.Name+"\""));
                 }
-                size_t TerminalIndex = ReturnValue.Terminals.size();
-                ReturnValue.NameToTerminal[NewTerminal.Name] = TerminalIndex;
-                ReturnValue.Terminals.push_back(std::move(NewTerminal));
+                else
+                {
+                    size_t TerminalIndex = ReturnValue.Terminals.size();
+                    OutInfo.TerminalDefinitions[NewTerminal.Name] = CurrentIdentifier.ByteOffset;
+                    ReturnValue.NameToTerminal[NewTerminal.Name] = TerminalIndex;
+                    ReturnValue.Terminals.push_back(std::move(NewTerminal));
+                }
 
             }
             else if(CurrentIdentifier.Value == "struct")
@@ -1278,18 +1333,22 @@ struct Hej1 : Hej2
                 StructDefinition NewStruct = p_ParseStruct(Data,DataSize,ParseOffset,&ParseOffset,OutInfo);
                 if(ReturnValue.NameToStruct.find(NewStruct.Name) != ReturnValue.NameToStruct.end())
                 {
-                    throw std::runtime_error("Semantic error parsing MBCC definitions: duplicate definition for struct \""+NewStruct.Name+"\"");
+                    OutInfo.Diagnostics.push_back(Diagnostic(CurrentIdentifier,"duplicate definition for terminal \""+NewStruct.Name+"\""));
                 }
-                size_t StructIndex = ReturnValue.Structs.size();
-                ReturnValue.NameToStruct[NewStruct.Name] = StructIndex;
-                ReturnValue.Structs.push_back(std::move(NewStruct));
+                else
+                {
+                    size_t StructIndex = ReturnValue.Structs.size();
+                    OutInfo.StructureDefinitions[NewStruct.Name] = CurrentIdentifier.ByteOffset;
+                    ReturnValue.NameToStruct[NewStruct.Name] = StructIndex;
+                    ReturnValue.Structs.push_back(std::move(NewStruct));
+                }
             }
             else if(CurrentIdentifier.Value == "skip")
             {
                 OutInfo.SemanticsTokens.push_back(DefinitionsToken(CurrentIdentifier,DefinitionsTokenType::Keyword));
                 if(ReturnValue.SkipRegex != "")
                 {
-                    throw std::runtime_error("Semantic error parsing MBCC definitions: there can only be one skip regex");   
+                    OutInfo.Diagnostics.push_back(Diagnostic(CurrentIdentifier,"there can only be one skip regex"));
                 }
                 MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
                 DefinitionsToken NewToken;
@@ -1301,12 +1360,12 @@ struct Hej1 : Hej2
                 OutInfo.SemanticsTokens.push_back(NewToken);
                 if(!ParseError)
                 {
-                    throw std::runtime_error("Syntax error parsing MBCC definitions: Error parsing skip statement: "+ParseError.ErrorMessage);
+                    throw MBCCParseError("Syntax error parsing MBCC definitions: Error parsing skip statement: "+ParseError.ErrorMessage,ParseOffset);
                 }
                 MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
                 if(ParseOffset >= DataSize || Data[ParseOffset] != ';')
                 {
-                    throw std::runtime_error("Syntax error parsing MBCC definitions: Skip statement needs delimiting ; to mark end");
+                    throw MBCCParseError("Syntax error parsing MBCC definitions: Skip statement needs delimiting ; to mark end",ParseOffset);
                 }
                 ParseOffset += 1;
             }
@@ -1328,32 +1387,40 @@ struct Hej1 : Hej2
                 {
                     if(ReturnValue.NameToTerminal.find(NewTerminal.Name) != ReturnValue.NameToTerminal.end())
                     {
-                        throw std::runtime_error("Semantic error parsing MBCC definitions: attempting to define non-terminal with the same name as a terminal named \""+NewTerminal.Name+"\"");
+                        OutInfo.Diagnostics.push_back(Diagnostic(CurrentIdentifier,"attempting to define non-terminal with the same name as a terminal named \""+NewTerminal.Name+"\""));
                     }
-                    size_t CurrentIndex = ReturnValue.NonTerminals.size();
-                    ReturnValue.NameToNonTerminal[NewTerminal.Name] = CurrentIndex;
-                    ReturnValue.NonTerminals.push_back(std::move(NewTerminal));
+                    else
+                    {
+                        size_t CurrentIndex = ReturnValue.NonTerminals.size();
+                        OutInfo.NonTerminalDefinitions[NewTerminal.Name] = CurrentIdentifier.ByteOffset;
+                        ReturnValue.NameToNonTerminal[NewTerminal.Name] = CurrentIndex;
+                        ReturnValue.NonTerminals.push_back(std::move(NewTerminal));
+                    }
                 }
             }
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
         }
         for(auto const& Def : UnresolvedDefs)
         {
-            if(ReturnValue.NameToNonTerminal.find(Def.first) == ReturnValue.NameToNonTerminal.end())
+            if(ReturnValue.NameToNonTerminal.find(Def.first.Value) == ReturnValue.NameToNonTerminal.end())
             {
-                throw std::runtime_error("Semantic error parsing MBCC definitions: def referencing undefined rule \""+Def.first+"\"");    
+                OutInfo.Diagnostics.push_back(Diagnostic(Def.first,"def referencing undefined rule \""+Def.first.Value+"\""));
             }
-            if(ReturnValue.NameToStruct.find(Def.second) == ReturnValue.NameToStruct.end())
+            else if(ReturnValue.NameToStruct.find(Def.second.Value) == ReturnValue.NameToStruct.end())
             {
-                throw std::runtime_error("Semantic error parsing MBCC definitions: def referencing undefined struct \""+Def.second+"\"");    
+                OutInfo.Diagnostics.push_back(Diagnostic(Def.second,"def referencing undefined struct \""+Def.second.Value+"\""));
             }
-            ReturnValue.NonTerminals[ReturnValue.NameToNonTerminal[Def.first]].AssociatedStruct = ReturnValue.NameToStruct[Def.second];
+            else
+            {
+                ReturnValue.NonTerminals[ReturnValue.NameToNonTerminal[Def.first.Value]].AssociatedStruct = ReturnValue.NameToStruct[Def.second.Value];
+            }
         }
         if(ReturnValue.SkipRegex == "")
         {
-            throw std::runtime_error("Semantic error parsing MBCC definitions: Skip regex is mandatory in order to construct tokenizer");   
+            OutInfo.Diagnostics.push_back(Diagnostic(0,5,"Skip regex is mandatory in order to construct tokenizer"));
         }
-        ReturnValue.p_UpdateReferencesAndVerify();
+        ReturnValue.p_UpdateReferencesAndVerify(OutInfo);
+        std::sort(OutInfo.SemanticsTokens.begin(),OutInfo.SemanticsTokens.end());
         return(ReturnValue);
     }
     int h_OffsetToLine(const char* Data,size_t ParseOffset)
@@ -1373,6 +1440,10 @@ struct Hej1 : Hej2
         MBCCDefinitions ReturnValue; 
         LSPInfo OutInfo;
         ReturnValue = ParseDefinitions(Data,DataSize,ParseOffset,OutInfo); 
+        if(OutInfo.Diagnostics.size() != 0)
+        {
+            throw std::runtime_error("Semantic error parsing definitions: "+OutInfo.Diagnostics[0].Message);
+        }
         //catch(MBCCParseError const& Exception)
         //{
         //    MBLSP::Diagnostic NeWDiagnostic;

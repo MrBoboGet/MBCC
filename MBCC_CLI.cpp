@@ -137,7 +137,7 @@ namespace MBCC
             {
                 for(auto const& Diagnostic : ParseError.Diagnostics)
                 {
-                    AssociatedTerminal.PrintLine(Diagnostic.message);
+                    AssociatedTerminal.PrintLine(Diagnostic.Message);
                 }
                 return(1);
             }
