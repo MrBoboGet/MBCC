@@ -131,11 +131,14 @@ namespace MBCC
             }
             std::string TotalFileData = MBUtility::ReadWholeFile(Input.CommandArguments[0]);
             MBCC::MBCCDefinitions Grammar;
-            std::string ErrorString;
-            Grammar = MBCC::MBCCDefinitions::ParseDefinitions(TotalFileData.data(),TotalFileData.size(),0,ErrorString);
-            if (ErrorString.size() > 0)
+            LSPInfo ParseError;
+            Grammar = MBCC::MBCCDefinitions::ParseDefinitions(TotalFileData.data(),TotalFileData.size(),0,ParseError);
+            if(ParseError.Diagnostics.size() > 0)
             {
-                AssociatedTerminal.PrintLine(ErrorString);
+                for(auto const& Diagnostic : ParseError.Diagnostics)
+                {
+                    AssociatedTerminal.PrintLine(Diagnostic.message);
+                }
                 return(1);
             }
             ParserOptions ParsOpts;

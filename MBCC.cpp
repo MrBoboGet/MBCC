@@ -116,21 +116,6 @@ namespace MBCC
     //    throw std::runtime_error("no member exists with name "+MemberName);
     //}
     //END StructDefinition
-    class MBCCParseError : public std::exception
-    {
-    public:
-        std::string ErrorMessage;
-        size_t ParseOffset = 0;
-        MBCCParseError(std::string Error,size_t NewParseOffset)
-        {
-            ErrorMessage = Error;
-            ParseOffset = NewParseOffset;
-        }
-        const char* what() const noexcept override 
-        {
-            return(ErrorMessage.data());
-        }
-    };
     Identifier MBCCDefinitions::p_ParseIdentifier(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset)
     {
         Identifier ReturnValue;
@@ -414,7 +399,7 @@ struct Hej1 : Hej2
         ParseOffset+=1;
         MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
         Identifier StructIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
-        OutInfo.SemanticsTokens.push_back(DefinitionsToken(StructIdentifier,DefinitionsTokenType::Struct));
+        OutInfo.SemanticsTokens.push_back(DefinitionsToken(StructIdentifier,DefinitionsTokenType::Class));
         std::string StructName = StructIdentifier.Value;
         if(StructName == "")
         {
@@ -476,25 +461,33 @@ struct Hej1 : Hej2
     //    }
     //    return(ReturnValue);
     //}
-    MemberExpression MBCCDefinitions::p_ParseMemberExpression(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo)
+    MemberExpression MBCCDefinitions::p_ParseMemberExpression(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset, LSPInfo& OutInfo)
     {
         MemberExpression ReturnValue;
         size_t ParseOffset = InParseOffset;
         while(ParseOffset < DataSize)
         {
             Identifier PartIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
-            if(ReturnValue.Names.size() == 0)
-            {
-                OutInfo.SemanticsTokens.push_back(DefinitionsToken(PartIdentifier,DefinitionsTokenType::NonTerminal));   
-            }
-            else 
-            {
-                OutInfo.SemanticsTokens.push_back(DefinitionsToken(PartIdentifier,DefinitionsTokenType::Variable));   
-            }
+            //if(IsLHS)
+            //{
+            //    OutInfo.SemanticsTokens.push_back(DefinitionsToken(PartIdentifier,DefinitionsTokenType::Variable));   
+            //}
+            //else
+            //{
+            //    if(ReturnValue.PartTypes.size() == 0)
+            //    {
+            //        OutInfo.SemanticsTokens.push_back(DefinitionsToken(PartIdentifier,DefinitionsTokenType::Rule));   
+            //    }
+            //    else
+            //    {
+            //        OutInfo.SemanticsTokens.push_back(DefinitionsToken(PartIdentifier,DefinitionsTokenType::Variable));   
+            //    }
+            //}
             std::string NewPart = PartIdentifier.Value;
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             ReturnValue.Names.push_back(std::move(NewPart));
             ReturnValue.PartTypes.push_back(-1);
+            ReturnValue.ByteOffset.push_back(PartIdentifier.ByteOffset);
             if(ParseOffset < DataSize && Data[ParseOffset] == '.')
             {
                 ParseOffset+=1; 
@@ -577,6 +570,33 @@ struct Hej1 : Hej2
                 {
                     throw MBCCParseError("Syntactic error parsing MBCC definitions: Rule member expression only allowed in member assignment",ParseOffset);
                 }    
+            }
+            for(int i = 0; i < RuleExpression.Names.size();i++)
+            {
+                if(i == 0)
+                {
+                    DefinitionsToken NewToken;
+                    NewToken.ByteOffset = RuleExpression.ByteOffset[i];
+                    NewToken.Length = RuleExpression.Names[i].size();
+                    NewToken.Type = DefinitionsTokenType::Rule;
+                    OutInfo.SemanticsTokens.push_back(NewToken);
+                }    
+                else
+                {
+                    DefinitionsToken NewToken;
+                    NewToken.ByteOffset = RuleExpression.ByteOffset[i];
+                    NewToken.Length = RuleExpression.Names[i].size();
+                    NewToken.Type = DefinitionsTokenType::Variable;
+                    OutInfo.SemanticsTokens.push_back(NewToken);
+                }
+            }
+            for(int i = 0; i < NewComponent.AssignedMember.Names.size();i++)
+            {
+                DefinitionsToken NewToken;
+                NewToken.ByteOffset = NewComponent.AssignedMember.ByteOffset[i];
+                NewToken.Length = NewComponent.AssignedMember.Names[i].size();
+                NewToken.Type = DefinitionsTokenType::Variable;
+                OutInfo.SemanticsTokens.push_back(NewToken);
             }
             if(ParseOffset >= DataSize)
             {
@@ -1254,7 +1274,7 @@ struct Hej1 : Hej2
             }
             else if(CurrentIdentifier.Value == "struct")
             {
-                OutInfo.SemanticsTokens.push_back(DefinitionsToken(CurrentIdentifier,DefinitionsTokenType::Struct));
+                OutInfo.SemanticsTokens.push_back(DefinitionsToken(CurrentIdentifier,DefinitionsTokenType::Keyword));
                 StructDefinition NewStruct = p_ParseStruct(Data,DataSize,ParseOffset,&ParseOffset,OutInfo);
                 if(ReturnValue.NameToStruct.find(NewStruct.Name) != ReturnValue.NameToStruct.end())
                 {
@@ -1292,6 +1312,7 @@ struct Hej1 : Hej2
             }
             else
             {
+                OutInfo.SemanticsTokens.push_back(DefinitionsToken(CurrentIdentifier,DefinitionsTokenType::NonTerminal));
                 std::vector<ParseRule> NewRules = p_ParseParseRules(Data,DataSize,ParseOffset,&ParseOffset,OutInfo);
                 NonTerminal NewTerminal;
                 NewTerminal.Rules = std::move(NewRules);

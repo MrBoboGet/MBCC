@@ -2,7 +2,8 @@
     "Dependancies": 
     [
         "MBParsing",
-        "MBCLI"
+        "MBCLI",
+        "MBLSP"
     ],
     "ExtraIncludes": 
     [
@@ -32,13 +33,14 @@
             ],
             "TargetType":"Executable"
         },
-        "BNFTest": 
+        "mbccd": 
         {
-            "OutputName":"BNFTest",
+            "OutputName":"mbccd",
             "Sources": 
             [
                 "/MBCC.cpp",
-                "/MBParsing_MBBNFTest.cpp"
+                "/MBCC_LSP.cpp",
+                "/MBCC_LSPMain.cpp"
             ],
             "TargetType":"Executable"
         }

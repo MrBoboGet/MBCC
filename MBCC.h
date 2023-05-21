@@ -259,6 +259,7 @@ namespace MBCC
         TypeInfo ResultType;
         std::vector<TypeInfo> PartTypes;
         std::vector<std::string> Names;
+        std::vector<size_t> ByteOffset;
     };
     struct RuleComponent
     {
@@ -345,10 +346,9 @@ namespace MBCC
         Terminal,
         NonTerminal,
         Class,
-        Struct,
+        Rule,
         Keyword,
         Variable,
-        SpecialToken,
         String
     };
     struct DefinitionsToken
@@ -372,6 +372,21 @@ namespace MBCC
         std::vector<MBLSP::Diagnostic> Diagnostics;
         std::vector<DefinitionsToken> SemanticsTokens;
         //begins?
+    };
+    class MBCCParseError : public std::exception
+    {
+    public:
+        std::string ErrorMessage;
+        size_t ParseOffset = 0;
+        MBCCParseError(std::string Error,size_t NewParseOffset)
+        {
+            ErrorMessage = Error;
+            ParseOffset = NewParseOffset;
+        }
+        const char* what() const noexcept override 
+        {
+            return(ErrorMessage.data());
+        }
     };
     class MBCCDefinitions
     {
