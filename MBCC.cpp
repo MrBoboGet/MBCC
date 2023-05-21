@@ -1391,6 +1391,7 @@ struct Hej1 : Hej2
                     }
                     RuleOffset++;
                 }
+                //add end?
                 m_Nodes[RuleOffset].Edges.push_back(GLAEdge(Grammar.Terminals.size(),Grammar.NonTerminals.size()+i));
                 RuleOffset++;
             }
@@ -1728,7 +1729,10 @@ struct Hej1 : Hej2
         for(int k = 0; k < lhs.NumberOfColumns();k++)
         {
             bool IsDisjunct = true;
-            for(int j = 0; j < lhs.NumberOfRows();j++)
+            //Hacky workaround because EOF is more common than it "should" be 
+            //because the LOOK algorithm is a bit more pessimistic than true SLL',
+            //if i understand it correctly
+            for(int j = 0; j < lhs.NumberOfRows()-1;j++)
             {
                 if(lhs(j,k) && rhs(j,k))
                 {
@@ -1789,10 +1793,6 @@ struct Hej1 : Hej2
             {
                 Productions[i] = GrammarGLA.LOOK(NonTermIndex,i,k);
             }
-            if(!h_RulesAreDisjunct(Productions))
-            {
-                throw std::runtime_error("Error creating linear-approximate-LL("+std::to_string(k)+") parser for grammar: Rule \""+NonTerminal.Name+"\" is non deterministic");
-            }
             ReturnValue.push_back(std::move(Productions));
             NonTermIndex++;
         }
@@ -1804,6 +1804,15 @@ struct Hej1 : Hej2
         p_VerifyNotLeftRecursive(Grammar,ERules);
         GLA GrammarGLA(Grammar,k);
         std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> TotalProductions = CalculateProductionsLinearApproxLOOK(Grammar,ERules,GrammarGLA,k);
+        NonTerminalIndex NonTermIndex = 0;
+        for(auto const& Productions : TotalProductions)
+        {
+            if(!h_RulesAreDisjunct(Productions))
+            {
+                throw std::runtime_error("Error creating linear-approximate-LL("+std::to_string(k)+") parser for grammar: Rule \""+Grammar.NonTerminals[NonTermIndex].Name+"\" is non deterministic");
+            }
+            NonTermIndex++;
+        }
         CPPStreamIndenter HeaderIndent(&HeaderOut);
         CPPStreamIndenter SourceIndent(&SourceOut);
         p_WriteParser(Grammar,TotalProductions,HeaderName,HeaderIndent,SourceIndent);
@@ -2016,7 +2025,7 @@ struct Hej1 : Hej2
         int CurrentOffset = 0;
         for(int CurrentStruct = 0; CurrentStruct < Grammar.Structs.size();CurrentStruct++)
         {
-            if(Grammar.Structs[CurrentOffset].ParentStruct.empty())
+            if(Grammar.Structs[CurrentStruct].ParentStruct.empty())
             {
                 CurrentOffset += h_UpdateInheritanceOrder(CurrentOffset,CurrentStruct,DepInfo,BeginList,EndList);
             }

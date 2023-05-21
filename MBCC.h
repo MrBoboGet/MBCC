@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <string>
+#include <type_traits>
 #include <vector>
 #include <unordered_map>
 #include <MBUtility/MBErrorHandling.h>
@@ -17,13 +18,14 @@ namespace MBCC
     template<typename T>
     int GetTypeBegin()
     {
-        static_assert(false,"GetTypeBegin only works with template specialization");  
+
+        static_assert(std::is_same<T,T>::value && false,"GetTypeBegin only works with template specialization");  
         return(-1);
     } 
     template<typename T>
     int GetTypeEnd()
     {
-        static_assert(false,"GetTypeEnd only works with template specialization");  
+        static_assert(std::is_same<T,T>::value && false,"GetTypeEnd only works with template specialization");  
         return(-1);
     } 
     class AST_Base
@@ -72,9 +74,12 @@ namespace MBCC
         PolyBase(PolyBase const& BaseToCopy)
         {
             m_TypeID = BaseToCopy.m_TypeID;
-            std::unique_ptr<AST_Base> CopiedStruct = m_Data->Copy();
-            AST_Base* CopiedPointer = CopiedStruct.release();
-            m_Data = std::unique_ptr<C>(static_cast<C*>(CopiedPointer));
+            if(BaseToCopy.m_Data != nullptr)
+            {
+                std::unique_ptr<AST_Base> CopiedStruct = BaseToCopy.m_Data->Copy();
+                AST_Base* CopiedPointer = CopiedStruct.release();
+                m_Data = std::unique_ptr<C>(static_cast<C*>(CopiedPointer));
+            }
         }
         PolyBase() = default;
         PolyBase(PolyBase&&) = default;
@@ -399,7 +404,7 @@ namespace MBCC
                 ConnectionTerminal = TerminalIndex;   
                 Connection = ConnectionIndex;
             }
-            //-1 means that it's and E connection
+            //-1 means that it's an E connection
             TerminalIndex ConnectionTerminal = -1;
             NodeIndex Connection = -1;
         };
