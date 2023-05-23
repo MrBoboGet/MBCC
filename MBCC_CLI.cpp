@@ -40,7 +40,7 @@ namespace MBCC
         auto ERules = MBCC::CalculateENonTerminals(Grammar);
         try
         {
-            MBCC::LLParserGenerator::VerifyNotLeftRecursive(Grammar, ERules);
+            MBCC::CPPParserGenerator::VerifyNotLeftRecursive(Grammar, ERules);
             if(CLIInput.CommandOptions.find("erules") != CLIInput.CommandOptions.end())
             {
                 AssociatedTerminal.PrintLine("ERules: ");
@@ -54,7 +54,7 @@ namespace MBCC
                 AssociatedTerminal.PrintLine("");
             }
             MBCC::GLA GrammarGLA(Grammar,ParsOpts.k);
-            auto Productions = MBCC::LLParserGenerator::CalculateProductionsLinearApproxLOOK(Grammar,ERules,GrammarGLA,ParsOpts.k);
+            auto Productions = MBCC::CPPParserGenerator::CalculateProductionsLinearApproxLOOK(Grammar,ERules,GrammarGLA,ParsOpts.k);
             if(CLIInput.CommandOptions.find("productions") != CLIInput.CommandOptions.end())
             {
                 PrintProductions(Productions,Grammar);
@@ -108,7 +108,7 @@ namespace MBCC
         }
         MBUtility::MBFileOutputStream HeaderStream(&OutHeader);
         MBUtility::MBFileOutputStream SourceStream(&OutSource);
-        MBCC::LLParserGenerator LLGenerator;
+        MBCC::CPPParserGenerator LLGenerator;
         LLGenerator.WriteLLParser(Grammar,HeaderFile,HeaderStream,SourceStream,ParsOpts.k);
         return(ReturnValue);
     }

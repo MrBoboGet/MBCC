@@ -625,7 +625,12 @@ namespace MBCC
 
 
 
+    bool Builtin(TypeInfo Info);
+    MBMath::MBDynamicMatrix<bool> CombineProductions(std::vector<MBMath::MBDynamicMatrix<bool>> const& MatrixesToCombine);
+    bool TypeIsBuiltin(std::string const& TypeToVerify);
+    TypeInfo BuiltinToType(std::string const& BuiltinType);
     std::vector<bool> CalculateENonTerminals(MBCCDefinitions const& Grammar);
+    bool RulesAreDisjunct(std::vector<MBMath::MBDynamicMatrix<bool>> const& ProductionsToVerify);
     class ParserCompiler
     {
     public:
@@ -643,32 +648,24 @@ namespace MBCC
         void WriteParser(MBCCDefinitions const& Grammar,std::string const& LanguageName,std::string const& OutputBase);
     };
 
-    class LLParserGenerator
-    {
-        //Non Terminal X Non Terminal Size
-        //Based on "LL LK requries k > 1, and in turn on the Linear-approx-LL(k) algorithm. If I understand the 
-        //algoritm correctly however, so might it be a bit of an pessimisation, as NonTermFollow of a NonTerminal 
-        //Is actually dependant on the specific rule being processed
-        //Non Terminal x K x Terminal 
-        //TerminalIndex = -1 sentinel for empty rule, +1 for empty, +2 for EOF
-        void p_WriteDefinitions(MBCCDefinitions const& Grammar,std::vector<TerminalStringMap> const& ParseTable,MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut, int k);
-        void p_WriteParser(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,
-                std::string const& HeaderName,
-                MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut);
-        void p_WriteHeader(MBCCDefinitions const& Grammar, MBUtility::MBOctetOutputStream& HeaderOut);
-        void p_WriteFunctionHeaders(MBCCDefinitions const& Grammar,MBUtility::MBOctetOutputStream& HeaderOut);
-        void p_WriteSource(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,
-                std::string const& HeaderName,MBUtility::MBOctetOutputStream& SourceOut);
-        void p_WriteLOOKTable(std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,MBUtility::MBOctetOutputStream& SourceOut);
-        std::string const& p_GetLOOKPredicate(NonTerminalIndex AssociatedNonTerminal,int Production = -1);
-        std::vector<std::vector<std::string>> m_ProductionPredicates;
-        void p_WriteNonTerminalFunction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTerminal, MBUtility::MBOctetOutputStream& SourceOut);
-        void p_WriteNonTerminalProduction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTerminal,int ProductionIndex,std::string const& FunctionName,MBUtility::MBOctetOutputStream& SourceOut);
+    //class CPPParserGenerator
+    //{
+    //    std::vector<std::vector<std::string>> m_ProductionPredicates;
 
-        static std::string p_GetTypeString(MBCCDefinitions const& Grammar,TypeInfo Type);
-        //Could possibly cache result
-        //-1 to specify full look
-    public:
-        void WriteLLParser(MBCCDefinitions const& InfoToWrite,std::string const& HeaderName,MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut,int k = 2);
-    };
+    //    void p_WriteParser(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,
+    //            std::string const& HeaderName,
+    //            MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut);
+    //    void p_WriteHeader(MBCCDefinitions const& Grammar, MBUtility::MBOctetOutputStream& HeaderOut);
+    //    void p_WriteFunctionHeaders(MBCCDefinitions const& Grammar,MBUtility::MBOctetOutputStream& HeaderOut);
+    //    void p_WriteSource(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,
+    //            std::string const& HeaderName,MBUtility::MBOctetOutputStream& SourceOut);
+    //    void p_WriteLOOKTable(std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,MBUtility::MBOctetOutputStream& SourceOut);
+    //    std::string const& p_GetLOOKPredicate(NonTerminalIndex AssociatedNonTerminal,int Production = -1);
+    //    void p_WriteNonTerminalFunction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTerminal, MBUtility::MBOctetOutputStream& SourceOut);
+    //    void p_WriteNonTerminalProduction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTerminal,int ProductionIndex,std::string const& FunctionName,MBUtility::MBOctetOutputStream& SourceOut);
+
+    //    static std::string p_GetTypeString(MBCCDefinitions const& Grammar,TypeInfo Type);
+    //public:
+    //    void WriteLLParser(MBCCDefinitions const& InfoToWrite,std::string const& HeaderName,MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut,int k = 2);
+    //};
 }
