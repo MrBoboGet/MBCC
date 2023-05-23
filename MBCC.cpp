@@ -1798,10 +1798,6 @@ struct Hej1 : Hej2
         }
         return ReturnValue;         
     }
-    std::vector<bool> LLParserGenerator::p_RetrieveENonTerminals(MBCCDefinitions const& Grammar)
-    {
-        return(CalculateENonTerminals(Grammar));
-    }
     //Maybe kinda slow, should do a proper ordo analysis of the algorithm
     void p_VerifyNonTerminalLeftRecursive(NonTerminalIndex CurrentIndex,std::vector<bool>& VisitedTerminals,std::vector<bool> const& ERules,MBCCDefinitions const& Grammar)
     {
@@ -1827,11 +1823,7 @@ struct Hej1 : Hej2
         }
         VisitedTerminals[CurrentIndex] = false;
     }
-    void LLParserGenerator::VerifyNotLeftRecursive(MBCCDefinitions const& Grammar,std::vector<bool> const& ERules)
-    {
-        p_VerifyNotLeftRecursive(Grammar,ERules);
-    }
-    void LLParserGenerator::p_VerifyNotLeftRecursive(MBCCDefinitions const& Grammar,std::vector<bool> const& ERules)
+    void ParserCompilerHandler::VerifyNotLeftRecursive(MBCCDefinitions const& Grammar,std::vector<bool> const& ERules)
     {
         for(int i = 0; i <  Grammar.NonTerminals.size();i++)
         {
@@ -1898,13 +1890,13 @@ struct Hej1 : Hej2
     void LLParserGenerator::p_WriteDefinitions(MBCCDefinitions const& Grammar,std::vector<TerminalStringMap> const& ParseTable,MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut, int k)
     {
     }
-    std::string LLParserGenerator::Verify(MBCCDefinitions const& Grammar)
+    std::string ParserCompilerHandler::Verify(MBCCDefinitions const& Grammar)
     {
         std::string ReturnValue;
         try
         {
-            std::vector<bool> ERules = p_RetrieveENonTerminals(Grammar); 
-            p_VerifyNotLeftRecursive(Grammar,ERules);
+            std::vector<bool> ERules = CalculateENonTerminals(Grammar); 
+            VerifyNotLeftRecursive(Grammar,ERules);
         }
         catch(std::exception const& e)
         {
@@ -1912,7 +1904,7 @@ struct Hej1 : Hej2
         }
         return(ReturnValue);
     }
-    std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> LLParserGenerator::CalculateProductionsLinearApproxLOOK(MBCCDefinitions const& Grammar,
+    std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> ParserCompilerHandler::CalculateProductionsLinearApproxLOOK(MBCCDefinitions const& Grammar,
             std::vector<bool> const& ERules,GLA const& GrammarGLA,int k)
     {
         std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> ReturnValue;
@@ -1931,10 +1923,10 @@ struct Hej1 : Hej2
     }
     void LLParserGenerator::WriteLLParser(MBCCDefinitions const& Grammar,std::string const& HeaderName,MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut,int k)
     {
-        std::vector<bool> ERules = p_RetrieveENonTerminals(Grammar); 
-        p_VerifyNotLeftRecursive(Grammar,ERules);
+        std::vector<bool> ERules = CalculateENonTerminals(Grammar); 
+        ParserCompilerHandler::VerifyNotLeftRecursive(Grammar,ERules);
         GLA GrammarGLA(Grammar,k);
-        std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> TotalProductions = CalculateProductionsLinearApproxLOOK(Grammar,ERules,GrammarGLA,k);
+        std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> TotalProductions = ParserCompilerHandler::CalculateProductionsLinearApproxLOOK(Grammar,ERules,GrammarGLA,k);
         NonTerminalIndex NonTermIndex = 0;
         for(auto const& Productions : TotalProductions)
         {

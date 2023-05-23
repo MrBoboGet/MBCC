@@ -622,11 +622,29 @@ namespace MBCC
         }
     };
 
+
+
+
     std::vector<bool> CalculateENonTerminals(MBCCDefinitions const& Grammar);
+    class ParserCompiler
+    {
+    public:
+        virtual void WriteParser(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& TotalProductions,std::string const& OutputBase) = 0; 
+    };
+
+    class ParserCompilerHandler
+    {
+    private:
+        std::unordered_map<std::string,std::unique_ptr<ParserCompiler>> m_Compilers;
+    public:
+        static void VerifyNotLeftRecursive(MBCCDefinitions const& Grammar,std::vector<bool> const& ERules);
+        static std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> CalculateProductionsLinearApproxLOOK(MBCCDefinitions const& Grammar,std::vector<bool> const& ERules,GLA const& GrammarGLA,int k);
+        static std::string Verify(MBCCDefinitions const& InfoToWrite);
+        void WriteParser(MBCCDefinitions const& Grammar,std::string const& LanguageName,std::string const& OutputBase);
+    };
+
     class LLParserGenerator
     {
-        static std::vector<bool> p_RetrieveENonTerminals(MBCCDefinitions const& Grammar);
-        static void p_VerifyNotLeftRecursive(MBCCDefinitions const& Grammar,std::vector<bool> const& ERules);
         //Non Terminal X Non Terminal Size
         //Based on "LL LK requries k > 1, and in turn on the Linear-approx-LL(k) algorithm. If I understand the 
         //algoritm correctly however, so might it be a bit of an pessimisation, as NonTermFollow of a NonTerminal 
@@ -647,14 +665,10 @@ namespace MBCC
         void p_WriteNonTerminalFunction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTerminal, MBUtility::MBOctetOutputStream& SourceOut);
         void p_WriteNonTerminalProduction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTerminal,int ProductionIndex,std::string const& FunctionName,MBUtility::MBOctetOutputStream& SourceOut);
 
-
         static std::string p_GetTypeString(MBCCDefinitions const& Grammar,TypeInfo Type);
         //Could possibly cache result
         //-1 to specify full look
     public:
-        static void VerifyNotLeftRecursive(MBCCDefinitions const& Grammar,std::vector<bool> const& ERules);
-        static std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> CalculateProductionsLinearApproxLOOK(MBCCDefinitions const& Grammar,std::vector<bool> const& ERules,GLA const& GrammarGLA,int k);
-        static std::string Verify(MBCCDefinitions const& InfoToWrite);
         void WriteLLParser(MBCCDefinitions const& InfoToWrite,std::string const& HeaderName,MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut,int k = 2);
     };
 }
