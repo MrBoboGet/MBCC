@@ -406,6 +406,11 @@ namespace MBCC
         std::vector<StructIndex> StructureDependancyOrder; 
         //Would it be faster to use a matrix?
         std::vector<std::set<StructIndex>> ChildrenMap;
+
+        bool HasChildren(StructIndex Struct) const
+        {
+            return ChildrenMap[Struct].size() > 0;   
+        }
     };
     
     struct Identifier

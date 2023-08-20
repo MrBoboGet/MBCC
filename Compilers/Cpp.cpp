@@ -468,6 +468,195 @@ namespace MBCC
         if(IsList) ReturnValue += ">"; 
         return(ReturnValue);
     }
+
+
+    std::string CPPParserGenerator::p_GetUniqueName()
+    {
+        std::string ReturnValue = "MBCC_TempVar"+std::to_string(m_CurrentNameIndex);
+        m_CurrentNameIndex++;
+        return ReturnValue;
+    }
+    std::string CPPParserGenerator::p_GetRHSString(MBCCDefinitions const& Grammar,RuleComponent const& ComponentToInspect)
+    {
+        std::string ReturnValue;
+        if(ComponentToInspect.IsTerminal)
+        {
+            if(ComponentToInspect.AssignedMember.IsEmpty())
+            {
+                return "";   
+            }
+            if(ComponentToInspect.AssignedMember.ResultType & TypeFlags::String)
+            {
+                return "Tokenizer.Peek().Value";
+            }
+            else if(ComponentToInspect.AssignedMember.ResultType & TypeFlags::Bool)
+            {
+                return "Tokenizer.Peek().Value == \"true\"";
+            }
+            else if(ComponentToInspect.AssignedMember.ResultType & TypeFlags::Int)
+            {
+                return "std::stoi(Tokenizer.Peek().Value)";
+            }
+        }
+        if(ComponentToInspect.ReferencedRule.IsType<MemberReference>())
+        {
+            MemberReference const& Expr = ComponentToInspect.ReferencedRule.GetType<MemberReference>();
+            if(Expr.Names[0] == "TOKEN")
+            {
+                return "Tokenizer.Peek()."+Expr.Names[1];
+            }
+            //no a terminal, and not a special rule, therefore a reference to a non-termial parse function + optional 
+            //member references
+            ReturnValue = "Parse"+Grammar.NonTerminals[ComponentToInspect.ComponentIndex].Name+"(Tokenizer)";
+            for(int i = 1; i < Expr.Names.size();i++)
+            {
+                ReturnValue += "."+Expr.Names[i];
+                if(!Builtin(Expr.PartTypes[i]) && Grammar.DepInfo.HasChildren(Expr.PartTypes[i]))
+                {
+                    ReturnValue += ".GetBase()";
+                }
+            }
+        }
+        else if(ComponentToInspect.ReferencedRule.IsType<Literal>())
+        {
+            if(ComponentToInspect.ReferencedRule.ResultType & TypeFlags::String)
+            {
+                ReturnValue = "\""+ComponentToInspect.ReferencedRule.GetType<Literal>().LiteralString+"\"";
+            }
+            else
+            {
+                ReturnValue = ComponentToInspect.ReferencedRule.GetType<Literal>().LiteralString;   
+            }
+        }
+        else
+        {
+            assert(false && "p_GetRHSString doesn't cover all cases for ReferencedRule.GetType");   
+        }
+        return ReturnValue;
+    }
+    std::string CPPParserGenerator::p_GetLHSMember(MBCCDefinitions const& Grammar,NonTerminal const& AssociatedNonTerminal,ParseRule const& Production ,RuleComponent const& ComponentToInspect,std::string& Delayed)
+    {
+        std::string ReturnValue;
+        if(ComponentToInspect.AssignedMember.IsEmpty())
+        {
+            return "";   
+        }
+        std::string MemberAccessString;
+        MemberReference const& Expr = ComponentToInspect.AssignedMember.GetType<MemberReference>();
+        if(AssociatedNonTerminal.AssociatedStruct != -1 && Grammar.DepInfo.HasChildren(AssociatedNonTerminal.AssociatedStruct))
+        {
+            MemberAccessString += ".GetBase()";
+        }
+        for(int i = 0; i < Expr.Names.size();i++)
+        {
+            MemberAccessString  += "."+Expr.Names[i];
+            if(!Builtin(Expr.PartTypes[i]) && Grammar.DepInfo.HasChildren(Expr.PartTypes[i]))
+            {
+                MemberAccessString += ".GetBase()";
+            }
+        }
+        if(!Production.NeedsAssignmentOrder)
+        {
+            ReturnValue = "ReturnValue"+MemberAccessString;
+        }
+        else
+        {
+            std::string NewVarName = p_GetUniqueName();
+            ReturnValue = p_GetTypeString(Grammar,ComponentToInspect.ReferencedRule.ResultType)+ " "+NewVarName+";\n";
+            Delayed = MemberAccessString;
+        }
+        return ReturnValue;
+    }
+    std::string CPPParserGenerator::p_GetCondType(MBCCDefinitions const& Grammar,RuleComponent const& ComponentToInspect)
+    {
+        if(ComponentToInspect.Max == 1 && ComponentToInspect.Min == 0)
+        {
+            return "if";
+        }
+        else if(ComponentToInspect.Min == 0 && ComponentToInspect.Max == -1)
+        {
+            return "while";   
+        }
+        else if(ComponentToInspect.Min == 1 && ComponentToInspect.Max == -1)
+        {
+            return "do";   
+        }
+        return "";
+    }
+    std::string CPPParserGenerator::p_GetCondExpression(MBCCDefinitions const& Grammar,RuleComponent const& ComponentToInspect)
+    {
+        std::string ReturnValue;
+        if(ComponentToInspect.IsTerminal && !(ComponentToInspect.Max == 1 && ComponentToInspect.Min == 1))
+        {
+            ReturnValue = "Tokenizer.Peek().Type == " + std::to_string(ComponentToInspect.ComponentIndex) + ")";
+        }
+        else
+        {
+            ReturnValue = p_GetLOOKPredicate(ComponentToInspect.ComponentIndex);
+        }
+
+        return ReturnValue;
+    }
+    std::string CPPParserGenerator::p_GetBody(MBCCDefinitions const& Grammar,NonTerminal const& AssociatedNonTerminal,ParseRule const& Production ,RuleComponent const& ComponentToWrite,std::string& DelayedString)
+    {
+        std::string ReturnValue;
+        std::string LhsString = p_GetLHSMember(Grammar,AssociatedNonTerminal,Production,ComponentToWrite,DelayedString);
+        std::string RhsString = p_GetRHSString(Grammar,ComponentToWrite);
+        if(!ComponentToWrite.AssignedMember.IsEmpty())
+        {
+            if( ComponentToWrite.Max == -1 || 
+                    ((ComponentToWrite.AssignedMember.ResultType & TypeFlags::List) && !(ComponentToWrite.ReferencedRule.ResultType & TypeFlags::List)))
+            {
+                ReturnValue = LhsString+".push_back("+RhsString+");\n";
+            }
+            else
+            {
+                ReturnValue = LhsString + " = " + RhsString + ";\n";
+            }
+        }
+        else if(ComponentToWrite.IsTerminal && (ComponentToWrite.Max == 1 && ComponentToWrite.Min == 1))
+        { 
+            ReturnValue = "if(Tokenizer.Peek().Type != " + std::to_string(ComponentToWrite.ComponentIndex) +
+                ")\n{\nthrow MBCC::ParsingException(Tokenizer.Peek().Position,\""+AssociatedNonTerminal.Name+"\",\""
+                +Grammar.Terminals[ComponentToWrite.ComponentIndex].Name +"\""+
+                    ");\n}\n";
+        }
+        if(ComponentToWrite.IsTerminal)
+        {
+            ReturnValue += "Tokenizer.ConsumeToken();\n";
+        }
+        return ReturnValue;
+    }
+    void CPPParserGenerator::p_WriteRuleComponent(MBCCDefinitions const& Grammar,NonTerminal const& AssociatedNonTerminal,ParseRule const& Production ,RuleComponent const& ComponentToWrite, 
+            MBUtility::MBOctetOutputStream& OutStream, std::vector<std::pair<std::string,std::string>>& DelayedAssignments)
+    {
+        std::string DelayedMember;
+        std::string Body = p_GetBody(Grammar,AssociatedNonTerminal,Production,ComponentToWrite,DelayedMember);
+        std::string CondType = p_GetCondType(Grammar,ComponentToWrite);
+        std::string CondExpression = p_GetCondExpression(Grammar,ComponentToWrite);
+
+        if(DelayedMember != "")
+        {
+            DelayedAssignments.push_back( {DelayedMember,ComponentToWrite.AssignedMember.GetType<MemberReference>().Names[0]});
+            OutStream<<p_GetTypeString(Grammar,ComponentToWrite.AssignedMember.ResultType)<<" "<<ComponentToWrite.AssignedMember.GetType<MemberReference>().Names[0]<<";\n";
+        }
+        if(CondType == "")
+        {
+            OutStream<<Body;   
+        }
+        else if(CondType == "if" || CondType == "while")
+        {
+            OutStream <<  CondType << "("<<CondExpression<<")\n{\n"<<Body<<"\n}\n";
+        }
+        else if(CondType == "do")
+        {
+            OutStream <<  CondType << "\n{\n"<<Body<<"\n}\n"<<"while("<<CondExpression<<")\n";
+        }
+        else
+        {
+            assert(false && "Unrecognzied cond type in p_WriteRuleComponent");   
+        }
+    }
     //TODO clean up this gigantic mess...
     void CPPParserGenerator::p_WriteNonTerminalProduction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTermIndex,int ProductionIndex,std::string const& FunctionName,MBUtility::MBOctetOutputStream& SourceOut)
     {
@@ -506,238 +695,7 @@ namespace MBCC
                 RegularComponentCount++;   
             }
             auto const& Component = *ComponentPointer;
-            std::string AssignPrefix;
-            std::string RHSMemberString;
-            //associated struct not null
-            if(!Component.AssignedMember.IsEmpty())
-            {
-                assert(AssoicatedStruct != nullptr);
-                std::string MemberSpecificationString;
-                MemberReference const&  AssignedMember = Component.AssignedMember.GetType<MemberReference>();
-                if(!(AssignedMember.Names.size() == 1 && AssignedMember.Names[0] == "this"))
-                {
-                    if(Grammar.DepInfo.ChildrenMap[AssociatedNonTerminal.AssociatedStruct].size() > 0)
-                    {
-                        MemberSpecificationString += ".GetBase()";   
-                    }
-                }
-                for(size_t i = 0; i < AssignedMember.Names.size();i++)
-                {
-                    if(AssignedMember.Names[i] == "this")
-                    {
-                        continue;   
-                    }
-                    assert(AssignedMember.PartTypes[i] != -1);
-                    MemberSpecificationString += ".";
-                    MemberSpecificationString += AssignedMember.Names[i];
-                    if(!Builtin(AssignedMember.PartTypes[i]) && i+1 < AssignedMember.Names.size())
-                    {
-                        if(Grammar.DepInfo.ChildrenMap[AssignedMember.PartTypes[i] & TypeFlags::Base].size() > 0)    
-                        {
-                            MemberSpecificationString += ".GetBase()";
-                        }
-                    }
-                }
-                //assert(Component.ReferencedRule.Names.size() > 0 || 
-                //        Grammar.NameToNonTerminal.find(Component.ReferencedRule.Names[0]) != Grammar.NameToNonTerminal.end());
-                if(!Builtin(Component.ReferencedRule.PartTypes.front()) && Component.ReferencedRule.PartTypes.size() > 1)
-                {
-                    if(Grammar.DepInfo.ChildrenMap[Component.ReferencedRule.PartTypes.front() & TypeFlags::Base].size() > 0)
-                    {
-                        RHSMemberString += ".GetBase()";
-                    }   
-                }
-                for(size_t i = 1; i < Component.ReferencedRule.Names.size();i++)
-                {
-                    RHSMemberString += ".";
-                    RHSMemberString += Component.ReferencedRule.Names[i];
-                    assert(Component.ReferencedRule.PartTypes[i] != -1);
-                    if(!Builtin(Component.ReferencedRule.PartTypes[i]) && i+1 < Component.AssignedMember.Names.size())
-                    {
-                        if(Grammar.DepInfo.ChildrenMap[Component.ReferencedRule.PartTypes[i] & TypeFlags::Base].size() > 0)    
-                        {
-                            RHSMemberString += ".GetBase()";
-                        }
-                    }
-                }
-                if(Component.AssignedMember.Names[0] == "this")
-                {
-                    AssignPrefix = "ReturnValue" + MemberSpecificationString+" = ";
-                }
-                else
-                {
-                    if(Production.NeedsAssignmentOrder)
-                    {
-                        assert(Component.AssignedMember.PartTypes.back() != -1 && "Can only call parser with completely verified MBCCDefinitions");
-                        SourceOut << p_GetTypeString(Grammar,Component.AssignedMember.PartTypes.back())<<" "<<Component.AssignedMember.Names[0]<<";\n";    
-                        AssignPrefix = Component.AssignedMember.Names[0];
-                        DelayedAssignments.push_back({MemberSpecificationString,Component.AssignedMember.Names[0]});
-                    }
-                    else
-                    {
-                        AssignPrefix = "ReturnValue"+MemberSpecificationString; 
-                    }
-                    if(Component.Max == -1 || 
-                            ((Component.AssignedMember.ResultType & TypeFlags::List) && !(Component.ReferencedRule.ResultType & TypeFlags::List)))
-                    {
-                         AssignPrefix += ".push_back(";   
-                    }
-                    else
-                    {
-                         AssignPrefix += " = ";   
-                    }
-                }
-            }
-            if(Component.IsTerminal)
-            {
-                if(Component.ReferencedRule.Names[0] == "TOKEN")
-                {
-                    SourceOut<<AssignPrefix<<"Tokenizer.Peek()."<<Component.ReferencedRule.Names[1]<<";\n";
-                }
-                else
-                {
-                    if (Component.Min == 1 && Component.Max == 1) 
-                    {
-                        SourceOut <<"if(Tokenizer.Peek().Type != " << std::to_string(Component.ComponentIndex) << 
-                            ")\n{\nthrow MBCC::ParsingException(Tokenizer.Peek().Position,"<<"\""<<AssociatedNonTerminal.Name <<"\",\""
-                            <<Grammar.Terminals[Component.ComponentIndex].Name <<"\""<<
-                                ");\n}\n";
-                    }
-                    else 
-                    {
-                        if (Component.Max == 1 && Component.Min == 0)
-                        {
-                            SourceOut << "if(Tokenizer.Peek().Type == " << std::to_string(Component.ComponentIndex) << ")\n{\n";
-                        }
-                        else if (Component.Max == -1)
-                        {
-                            SourceOut << "while(Tokenizer.Peek().Type == " << std::to_string(Component.ComponentIndex) << ")\n{\n";
-                        }
-                    }
-                    if(Component.AssignedMember.Names.size() != 0)
-                    {
-                        std::string Suffix = ";\n";
-                        if((Component.AssignedMember.ResultType & TypeFlags::List) && !(Component.ReferencedRule.ResultType & TypeFlags::List))
-                        {
-                            Suffix = ");\n";
-                        }
-                        MBUtility::WriteData(SourceOut,AssignPrefix);
-                        StructMemberVariable const& Member = Grammar.GetMember(*AssoicatedStruct,Component.AssignedMember.Names[0]);
-                        if(Member.IsType<StructMemberVariable_String>())
-                        {
-                            SourceOut<<"Tokenizer.Peek().Value"<<Suffix;
-                        }
-                        else if(Member.IsType<StructMemberVariable_Int>())
-                        {
-                            SourceOut<<"std::stoi(Tokenizer.Peek().Value)"<<Suffix;
-                        }
-                        else if(Member.IsType<StructMemberVariable_Bool>())
-                        {
-                            SourceOut<<"Tokenizer.Peek().Value == \"true\""<<Suffix;
-                        }
-                        else if(Member.IsType<StructMemberVariable_List>())
-                        {
-                            StructMemberVariable_List const& ListData = Member.GetType<StructMemberVariable_List>();
-                            if(ListData.ListType == "string")
-                            {
-                                SourceOut<<"Tokenizer.Peek().Value"<<Suffix;
-                            }
-                            else if(ListData.ListType == "int")
-                            {
-                                SourceOut<<"std::stoi(Tokenizer.Peek().Value)"<<Suffix;
-                            }
-                            else if(ListData.ListType == "bool")
-                            {
-                                SourceOut<<"Tokenizer.Peek().Value == \"true\""<<Suffix;
-                            }
-                        }
-                    } 
-                    MBUtility::WriteData(SourceOut,"Tokenizer.ConsumeToken();\n");
-                    if (!(Component.Max == 1 && Component.Min == 1))
-                    {
-                        SourceOut << "\n}\n";
-                    }
-                }
-            } 
-            else
-            {
-                std::string ConverterPrefix = "";
-                std::string ConverterSuffix = "";
-                if(Component.AssignedMember.Names.size() !=  0 && (Component.ReferencedRule.PartTypes.back() & TypeFlags::String))
-                {
-                    if(Component.AssignedMember.PartTypes.back() & TypeFlags::Bool)
-                    {
-                        ConverterSuffix = " == \"true\""; 
-                    }
-                    else if(Component.AssignedMember.PartTypes.back() & TypeFlags::Int)
-                    {
-                        ConverterPrefix = "std::stoi(";   
-                        ConverterSuffix = ")";
-                    }
-                }
-                if((Component.AssignedMember.ResultType & TypeFlags::List) && !(Component.ReferencedRule.ResultType & TypeFlags::List))
-                {
-                    //a extra ) is added because of pushback(...
-                    ConverterSuffix += ")";
-                }
-                if(Component.Min == 1 && Component.Max == 1)
-                {
-                    SourceOut<<"if("<<p_GetLOOKPredicate(Component.ComponentIndex)<<")\n{\n";
-                    if(Component.AssignedMember.Names.size() != 0)
-                    {
-                        //NOTE: multi variable member cannot be assigned to this
-                        SourceOut<<AssignPrefix;
-                    }
-                    SourceOut<<ConverterPrefix<<"Parse"<<Grammar.NonTerminals[Component.ComponentIndex].Name<<"(Tokenizer)"<<RHSMemberString
-                        <<ConverterSuffix<<";\n}\n";
-                    SourceOut<<"else\n{\n throw MBCC::ParsingException(Tokenizer.Peek().Position,\""<<AssociatedNonTerminal.Name<<"\","<<
-                        "\""<<Grammar.NonTerminals[Component.ComponentIndex].Name<<"\");\n}\n";
-                } 
-                else if(Component.Min == 1 && Component.Max == -1)
-                {
-                    SourceOut<<"do\n{\n";    
-                    if(Component.AssignedMember.Names.size() != 0)
-                    {
-                        SourceOut<<AssignPrefix;
-                        SourceOut<< ConverterPrefix<<"Parse"<<Grammar.NonTerminals[Component.ComponentIndex].Name<<"(Tokenizer)"<<RHSMemberString
-                            << ConverterSuffix<<");\n}\n";
-                    }
-                    else
-                    {
-                        SourceOut<<"Parse"<<Grammar.NonTerminals[Component.ComponentIndex].Name<<"(Tokenizer);\n}\n";
-                    }
-                    SourceOut<<"while("<<p_GetLOOKPredicate(Component.ComponentIndex)<<");\n";
-                }
-                else if(Component.Min == 0 && Component.Max == -1)
-                {
-                    MBUtility::WriteData(SourceOut,"while("+p_GetLOOKPredicate(Component.ComponentIndex)+")\n{\n");
-                    if(Component.AssignedMember.Names.size() != 0)
-                    {
-                        SourceOut<<AssignPrefix;
-                        SourceOut<< ConverterPrefix<<"Parse"<<Grammar.NonTerminals[Component.ComponentIndex].Name<<"(Tokenizer)"<<RHSMemberString
-                            << ConverterSuffix<<");\n}\n";
-                    }
-                    else
-                    {
-                        SourceOut<<"Parse"<<Grammar.NonTerminals[Component.ComponentIndex].Name<<"(Tokenizer);\n}\n";
-                    }
-                }
-                else if(Component.Min == 0 && Component.Max == 1)
-                {
-                    SourceOut<<"if("<<p_GetLOOKPredicate(Component.ComponentIndex)<<")\n{\n";
-                    if(Component.AssignedMember.Names.size() != 0)
-                    {
-                        //NOTE: multi variable member cannot be assigned to this
-                        SourceOut<<AssignPrefix;
-                    }
-                    SourceOut<<ConverterPrefix<<"Parse"<<Grammar.NonTerminals[Component.ComponentIndex].Name<<"(Tokenizer)"<<RHSMemberString
-                        <<ConverterSuffix<<";\n}\n";
-                }
-                else
-                {
-                    assert(false && "Min can only be 0 or 1, max can only be 1 or -1");
-                }
-            }
+            p_WriteRuleComponent(Grammar,AssociatedNonTerminal,Production,Component,SourceOut,DelayedAssignments);
         }
         for(auto const& Assignment : DelayedAssignments)
         {
