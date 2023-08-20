@@ -7,6 +7,9 @@
 #include <set>
 #include <numeric>
 #include <MBParsing/MBParsing.h>
+
+
+#include "Compilers/Cpp.h"
 namespace MBCC
 {
     TypeInfo BuiltinToType(std::string const& BuiltinType)
@@ -1863,8 +1866,37 @@ struct Hej1 : Hej2
         }
         return(ReturnValue);
     }
+    void ParserCompilerHandler::WriteParser(MBCCDefinitions const& Grammar,GrammarOptions const& Options,std::string const& LanguageName,std::string const& OutputBase)
+    {
+        std::vector<bool> ERules = CalculateENonTerminals(Grammar); 
+        ParserCompilerHandler::VerifyNotLeftRecursive(Grammar,ERules);
+        GLA GrammarGLA(Grammar,Options.k);
+        std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> TotalProductions = ParserCompilerHandler::CalculateProductionsLinearApproxLOOK(Grammar,ERules,GrammarGLA,Options.k);
+        NonTerminalIndex NonTermIndex = 0;
+        for(auto const& Productions : TotalProductions)
+        {
+            if(!RulesAreDisjunct(Productions))
+            {
+                throw std::runtime_error("Error creating linear-approximate-LL("+std::to_string(Options.k)+") parser for grammar: Rule \""+Grammar.NonTerminals[NonTermIndex].Name+"\" is non deterministic");
+            }
+            NonTermIndex++;
+        }
+        auto CompIt = m_Compilers.find(LanguageName);
+        if(CompIt == m_Compilers.end())
+        {
+            throw std::runtime_error("Error creating source code: no compiler for langauge \""+LanguageName+"\"");
+        }
+        CompIt->second->WriteParser(Grammar,TotalProductions,OutputBase);
+        //CPPStreamIndenter HeaderIndent(&HeaderOut);
+        //CPPStreamIndenter SourceIndent(&SourceOut);
+        //p_WriteParser(Grammar,TotalProductions,HeaderName,HeaderIndent,SourceIndent);
+    }
+    ParserCompilerHandler::ParserCompilerHandler()
+    {
+        m_Compilers["cpp"] = std::make_unique<CPPParserGenerator>();
+    }
     std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> ParserCompilerHandler::CalculateProductionsLinearApproxLOOK(MBCCDefinitions const& Grammar,
-            std::vector<bool> const& ERules,GLA const& GrammarGLA,int k)
+    std::vector<bool> const& ERules,GLA const& GrammarGLA,int k)
     {
         std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> ReturnValue;
         NonTerminalIndex NonTermIndex = 0;

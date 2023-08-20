@@ -3,6 +3,7 @@
     [
         "MBParsing",
         "MBCLI",
+        "MBUnicode",
         "MBLSP"
     ],
     "ExtraIncludes": 
@@ -18,7 +19,8 @@
             "OutputName":"MBCC",
             "Sources": 
             [
-                "/MBCC.cpp"
+                "/MBCC.cpp",
+                "/Compilers/Cpp.cpp"
             ],
             "TargetType":"Library"
         },
@@ -28,6 +30,7 @@
             "Sources": 
             [
                 "/MBCC.cpp",
+                "/Compilers/Cpp.cpp",
                 "/MBCC_CLI.cpp",
                 "/MBCC_Main.cpp"
             ],
@@ -39,6 +42,7 @@
             "Sources": 
             [
                 "/MBCC.cpp",
+                "/Compilers/Cpp.cpp",
                 "/MBCC_LSP.cpp",
                 "/MBCC_LSPMain.cpp"
             ],

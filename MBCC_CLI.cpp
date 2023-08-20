@@ -1,6 +1,7 @@
 #include "MBCC_CLI.h"
 #include <MBUtility/MBFiles.h>
 #include <fstream>
+
 namespace MBCC
 {
     void PrintProductions(std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& TotalProductions,MBCCDefinitions const& Grammar)
@@ -33,14 +34,14 @@ namespace MBCC
             NonTermIndex++;
         }
     }
-    int MBCC_CLI::p_Verify(MBCC::MBCCDefinitions const& Grammar,ParserOptions const& ParsOpts,MBCLI::ArgumentListCLIInput const& CLIInput,MBCLI::MBTerminal& AssociatedTerminal)
+    int MBCC_CLI::p_Verify(MBCC::MBCCDefinitions const& Grammar,GrammarOptions const& ParsOpts,MBCLI::ArgumentListCLIInput const& CLIInput,MBCLI::MBTerminal& AssociatedTerminal)
     {
         int ReturnValue = 0;
         //Always verify not left recursive
         auto ERules = MBCC::CalculateENonTerminals(Grammar);
         try
         {
-            MBCC::CPPParserGenerator::VerifyNotLeftRecursive(Grammar, ERules);
+            MBCC::ParserCompilerHandler::VerifyNotLeftRecursive(Grammar, ERules);
             if(CLIInput.CommandOptions.find("erules") != CLIInput.CommandOptions.end())
             {
                 AssociatedTerminal.PrintLine("ERules: ");
@@ -54,7 +55,7 @@ namespace MBCC
                 AssociatedTerminal.PrintLine("");
             }
             MBCC::GLA GrammarGLA(Grammar,ParsOpts.k);
-            auto Productions = MBCC::CPPParserGenerator::CalculateProductionsLinearApproxLOOK(Grammar,ERules,GrammarGLA,ParsOpts.k);
+            auto Productions = MBCC::ParserCompilerHandler::CalculateProductionsLinearApproxLOOK(Grammar,ERules,GrammarGLA,ParsOpts.k);
             if(CLIInput.CommandOptions.find("productions") != CLIInput.CommandOptions.end())
             {
                 PrintProductions(Productions,Grammar);
@@ -67,49 +68,36 @@ namespace MBCC
         }
         return(ReturnValue);
     }
-    int MBCC_CLI::p_Compile(MBCC::MBCCDefinitions const& Grammar,ParserOptions const& ParsOpts,MBCLI::ArgumentListCLIInput const& Input,MBCLI::MBTerminal& AssociatedTerminal)
+    int MBCC_CLI::p_Compile(MBCC::MBCCDefinitions const& Grammar,GrammarOptions const& ParsOpts,MBCLI::ArgumentListCLIInput const& Input,MBCLI::MBTerminal& AssociatedTerminal)
     {
         int ReturnValue = 0;
-        std::string HeaderFile;
-        std::string SourceFile;
-        if(Input.CommandArgumentOptions.find("h") == Input.CommandArgumentOptions.end())
+        std::string Language;
+        std::string Output;
+        if(Input.CommandArgumentOptions.find("l") == Input.CommandArgumentOptions.end())
         {
-            AssociatedTerminal.PrintLine("Parser generation requires the path for the output header file specified with the -h option");   
+            AssociatedTerminal.PrintLine("Parser generation requires that the language is give with the -l option");
             return(1);
         }
-        if(Input.CommandArgumentOptions.at("h").size() > 1)
+        if(Input.CommandArgumentOptions.at("l").size() > 1)
         {
-            AssociatedTerminal.PrintLine("Can only specify one output header file");    
+            AssociatedTerminal.PrintLine("Can only specify one language");
             return(1);
         }
-        HeaderFile = Input.CommandArgumentOptions.at("h")[0];
-        if(Input.CommandArgumentOptions.find("s") == Input.CommandArgumentOptions.end())
+        Language = Input.CommandArgumentOptions.at("l")[0];
+        if(Input.CommandArgumentOptions.find("o") == Input.CommandArgumentOptions.end())
         {
-            AssociatedTerminal.PrintLine("Parser generation requires the path for the output source file specified with -s option");   
+            AssociatedTerminal.PrintLine("Parser generation requires the path for the output base is specified with -o option");   
             return(1);
         }
-        if(Input.CommandArgumentOptions.at("s").size() > 1)
+        if(Input.CommandArgumentOptions.at("o").size() > 1)
         {
-            AssociatedTerminal.PrintLine("Can only specify one output source file");    
+            AssociatedTerminal.PrintLine("Can only specify one output base");    
             return(1);
         }
-        SourceFile = Input.CommandArgumentOptions.at("s")[0];
-        std::ofstream OutHeader = std::ofstream(HeaderFile);
-        std::ofstream OutSource = std::ofstream(SourceFile);
-        if(!OutHeader.is_open())
-        {
-            AssociatedTerminal.PrintLine("Failed to open header file");    
-            return(1);
-        }
-        if(!OutSource.is_open())
-        {
-            AssociatedTerminal.PrintLine("Failed to open output source file");    
-            return(1);
-        }
-        MBUtility::MBFileOutputStream HeaderStream(&OutHeader);
-        MBUtility::MBFileOutputStream SourceStream(&OutSource);
-        MBCC::CPPParserGenerator LLGenerator;
-        LLGenerator.WriteLLParser(Grammar,HeaderFile,HeaderStream,SourceStream,ParsOpts.k);
+        Output = Input.CommandArgumentOptions.at("o")[0];
+        MBCC::ParserCompilerHandler LLGenerator;
+
+        LLGenerator.WriteParser(Grammar,ParsOpts,Language,Output);
         return(ReturnValue);
     }
     int MBCC_CLI::Run(MBCLI::MBTerminal& AssociatedTerminal,int argc,const char* const* argv)
@@ -141,7 +129,7 @@ namespace MBCC
                 }
                 return(1);
             }
-            ParserOptions ParsOpts;
+            GrammarOptions ParsOpts;
             if(Input.CommandArgumentOptions.find("k") != Input.CommandArgumentOptions.end())
             {
                 auto const& KVector = Input.CommandArgumentOptions.at("k");    

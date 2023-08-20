@@ -2,7 +2,7 @@
 
 namespace MBCC
 {
-    class CPPParserGenerator
+    class CPPParserGenerator : public ParserCompiler
     {
         std::vector<std::vector<std::string>> m_ProductionPredicates;
 
@@ -21,5 +21,6 @@ namespace MBCC
         static std::string p_GetTypeString(MBCCDefinitions const& Grammar,TypeInfo Type);
     public:
         void WriteLLParser(MBCCDefinitions const& InfoToWrite,std::string const& HeaderName,MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut,int k = 2);
+        virtual void WriteParser(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& TotalProductions,std::string const& OutputBase) override;
     };
 }

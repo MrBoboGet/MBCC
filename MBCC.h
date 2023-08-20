@@ -636,16 +636,21 @@ namespace MBCC
     public:
         virtual void WriteParser(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& TotalProductions,std::string const& OutputBase) = 0; 
     };
-
+    struct GrammarOptions
+    {
+        int k = 1;
+    };
     class ParserCompilerHandler
     {
     private:
         std::unordered_map<std::string,std::unique_ptr<ParserCompiler>> m_Compilers;
     public:
+        ParserCompilerHandler();
+        ParserCompilerHandler(ParserCompilerHandler const&) = delete;
         static void VerifyNotLeftRecursive(MBCCDefinitions const& Grammar,std::vector<bool> const& ERules);
         static std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> CalculateProductionsLinearApproxLOOK(MBCCDefinitions const& Grammar,std::vector<bool> const& ERules,GLA const& GrammarGLA,int k);
         static std::string Verify(MBCCDefinitions const& InfoToWrite);
-        void WriteParser(MBCCDefinitions const& Grammar,std::string const& LanguageName,std::string const& OutputBase);
+        void WriteParser(MBCCDefinitions const& Grammar,GrammarOptions const& Options,std::string const& LanguageName,std::string const& OutputBase);
     };
 
     //class CPPParserGenerator

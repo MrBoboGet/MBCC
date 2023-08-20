@@ -1,5 +1,6 @@
 #include "Cpp.h"
 
+#include <MBUnicode/MBUnicode.h>
 namespace MBCC
 {
     std::string h_BuiltinToCPP(TypeInfo Info)
@@ -235,7 +236,25 @@ namespace MBCC
         CPPStreamIndenter SourceIndent(&SourceOut);
         p_WriteParser(Grammar,TotalProductions,HeaderName,HeaderIndent,SourceIndent);
     } 
-       
+    void CPPParserGenerator::WriteParser(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& TotalProductions,std::string const& OutputBase)
+    {
+        std::ofstream HeaderFile = std::ofstream(OutputBase+".h",std::ios::out | std::ios::binary);
+        if(!HeaderFile.is_open())
+        {
+            throw std::runtime_error("Error opening output header file \""+OutputBase+".h\"");
+        }
+        std::ofstream SourceFile = std::ofstream(OutputBase+".cpp",std::ios::out | std::ios::binary);
+        if(!SourceFile.is_open())
+        {
+            throw std::runtime_error("Error opening output source file \""+OutputBase+".cpp\"");
+        }
+        std::string HeaderName = MBUnicode::PathToUTF8(std::filesystem::path(OutputBase).filename())+".h";
+        MBUtility::MBFileOutputStream HeaderStream(&HeaderFile);
+        MBUtility::MBFileOutputStream SourceStream(&SourceFile);
+        CPPStreamIndenter HeaderIndent(&HeaderStream);
+        CPPStreamIndenter SourceIndent(&SourceStream);
+        p_WriteParser(Grammar,TotalProductions,HeaderName,HeaderIndent,SourceIndent);
+    }
     void CPPParserGenerator::p_WriteParser(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,
             std::string const& HeaderName,
         MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut)
