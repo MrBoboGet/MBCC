@@ -509,36 +509,37 @@ namespace MBCC
             std::string AssignPrefix;
             std::string RHSMemberString;
             //associated struct not null
-            if(Component.AssignedMember.Names.size() != 0)
+            if(!Component.AssignedMember.IsEmpty())
             {
                 assert(AssoicatedStruct != nullptr);
                 std::string MemberSpecificationString;
-                if(!(Component.AssignedMember.Names.size() == 1 && Component.AssignedMember.Names[0] == "this"))
+                MemberReference const&  AssignedMember = Component.AssignedMember.GetType<MemberReference>();
+                if(!(AssignedMember.Names.size() == 1 && AssignedMember.Names[0] == "this"))
                 {
                     if(Grammar.DepInfo.ChildrenMap[AssociatedNonTerminal.AssociatedStruct].size() > 0)
                     {
                         MemberSpecificationString += ".GetBase()";   
                     }
                 }
-                for(size_t i = 0; i < Component.AssignedMember.Names.size();i++)
+                for(size_t i = 0; i < AssignedMember.Names.size();i++)
                 {
-                    if(Component.AssignedMember.Names[i] == "this")
+                    if(AssignedMember.Names[i] == "this")
                     {
                         continue;   
                     }
-                    assert(Component.AssignedMember.PartTypes[i] != -1);
+                    assert(AssignedMember.PartTypes[i] != -1);
                     MemberSpecificationString += ".";
-                    MemberSpecificationString += Component.AssignedMember.Names[i];
-                    if(!Builtin(Component.AssignedMember.PartTypes[i]) && i+1 < Component.AssignedMember.Names.size())
+                    MemberSpecificationString += AssignedMember.Names[i];
+                    if(!Builtin(AssignedMember.PartTypes[i]) && i+1 < AssignedMember.Names.size())
                     {
-                        if(Grammar.DepInfo.ChildrenMap[Component.AssignedMember.PartTypes[i] & TypeFlags::Base].size() > 0)    
+                        if(Grammar.DepInfo.ChildrenMap[AssignedMember.PartTypes[i] & TypeFlags::Base].size() > 0)    
                         {
                             MemberSpecificationString += ".GetBase()";
                         }
                     }
                 }
-                assert(Component.ReferencedRule.Names.size() > 0 || 
-                        Grammar.NameToNonTerminal.find(Component.ReferencedRule.Names[0]) != Grammar.NameToNonTerminal.end());
+                //assert(Component.ReferencedRule.Names.size() > 0 || 
+                //        Grammar.NameToNonTerminal.find(Component.ReferencedRule.Names[0]) != Grammar.NameToNonTerminal.end());
                 if(!Builtin(Component.ReferencedRule.PartTypes.front()) && Component.ReferencedRule.PartTypes.size() > 1)
                 {
                     if(Grammar.DepInfo.ChildrenMap[Component.ReferencedRule.PartTypes.front() & TypeFlags::Base].size() > 0)

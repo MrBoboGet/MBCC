@@ -292,13 +292,48 @@ namespace MBCC
 
         constexpr unsigned int Base = ~(List|String|Int|Bool|Token|Raw|TokenPos);
     }
-
-    struct MemberExpression
+    struct MemberReference
     {
-        TypeInfo ResultType;
         std::vector<TypeInfo> PartTypes;
         std::vector<std::string> Names;
-        std::vector<size_t> ByteOffset;
+        std::vector<size_t> PartByteOffsets;
+    };
+    struct Literal
+    {
+        std::string LiteralString;
+    };
+    class MemberExpression
+    {
+        struct Empty{};
+        std::variant<Empty,MemberReference,Literal> m_Data;
+    public:
+        TypeInfo ResultType;
+
+        bool IsEmpty() const
+        {
+            return IsType<Empty>();
+        }
+        template<typename T>
+        bool IsType() const
+        {
+            return std::holds_alternative<T>(m_Data);   
+        }
+        template<typename T>
+        T& SetType()
+        {
+            m_Data = T();
+            return std::get<T>(m_Data);
+        }
+        template<typename T>
+        T& GetType()
+        {
+            return std::get<T>(m_Data);
+        }
+        template<typename T>
+        T const& GetType() const
+        {
+            return std::get<T>(m_Data);
+        }
     };
     struct RuleComponent
     {

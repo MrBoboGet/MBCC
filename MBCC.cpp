@@ -527,9 +527,10 @@ struct Hej1 : Hej2
             //}
             std::string NewPart = PartIdentifier.Value;
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
-            ReturnValue.Names.push_back(std::move(NewPart));
-            ReturnValue.PartTypes.push_back(-1);
-            ReturnValue.ByteOffset.push_back(PartIdentifier.ByteOffset);
+            MemberReference& MemberExpr = ReturnValue.SetType<MemberReference>();
+            MemberExpr.Names.push_back(std::move(NewPart));
+            MemberExpr.PartTypes.push_back(-1);
+            MemberExpr.PartByteOffsets.push_back(PartIdentifier.ByteOffset);
             if(ParseOffset < DataSize && Data[ParseOffset] == '.')
             {
                 ParseOffset+=1; 
@@ -539,7 +540,7 @@ struct Hej1 : Hej2
                 break;
             }
         }
-        if(ReturnValue.Names.size() == 0)
+        if(ReturnValue.IsType<MemberReference>() && ReturnValue.GetType<MemberReference>().Names.size() == 0)
         {
             throw MBCCParseError("Syntactic error parsing MBCC definitions: Member expression needs atleast one member",ParseOffset);
         }
@@ -608,37 +609,49 @@ struct Hej1 : Hej2
             }
             else
             {
-                if(RuleExpression.Names.size() > 1)
+                if(RuleExpression.IsType<Literal>())
+                {
+                    throw MBCCParseError("Syntactic error parsing MBCC definitions: Literal only allowed in assignment",ParseOffset);
+                }
+                if(RuleExpression.IsType<MemberReference>() && RuleExpression.GetType<MemberReference>().Names.size() > 0)
                 {
                     throw MBCCParseError("Syntactic error parsing MBCC definitions: Rule member expression only allowed in member assignment",ParseOffset);
                 }    
             }
-            for(int i = 0; i < RuleExpression.Names.size();i++)
+            if(RuleExpression.IsType<MemberReference>())
             {
-                if(i == 0)
+                MemberReference& Expr = RuleExpression.GetType<MemberReference>();
+                for(int i = 0; i < Expr.Names.size();i++)
                 {
-                    DefinitionsToken NewToken;
-                    NewToken.ByteOffset = RuleExpression.ByteOffset[i];
-                    NewToken.Length = RuleExpression.Names[i].size();
-                    NewToken.Type = DefinitionsTokenType::Rule;
-                    OutInfo.SemanticsTokens.push_back(NewToken);
-                }    
-                else
-                {
-                    DefinitionsToken NewToken;
-                    NewToken.ByteOffset = RuleExpression.ByteOffset[i];
-                    NewToken.Length = RuleExpression.Names[i].size();
-                    NewToken.Type = DefinitionsTokenType::AssignedRHS;
-                    OutInfo.SemanticsTokens.push_back(NewToken);
+                    if(i == 0)
+                    {
+                        DefinitionsToken NewToken;
+                        NewToken.ByteOffset = Expr.PartByteOffsets[i];
+                        NewToken.Length = Expr.Names[i].size();
+                        NewToken.Type = DefinitionsTokenType::Rule;
+                        OutInfo.SemanticsTokens.push_back(NewToken);
+                    }    
+                    else
+                    {
+                        DefinitionsToken NewToken;
+                        NewToken.ByteOffset = Expr.PartByteOffsets[i];
+                        NewToken.Length = Expr.Names[i].size();
+                        NewToken.Type = DefinitionsTokenType::AssignedRHS;
+                        OutInfo.SemanticsTokens.push_back(NewToken);
+                    }
                 }
             }
-            for(int i = 0; i < NewComponent.AssignedMember.Names.size();i++)
+            if(NewComponent.AssignedMember.IsType<MemberReference>())
             {
-                DefinitionsToken NewToken;
-                NewToken.ByteOffset = NewComponent.AssignedMember.ByteOffset[i];
-                NewToken.Length = NewComponent.AssignedMember.Names[i].size();
-                NewToken.Type = DefinitionsTokenType::AssignedLHS;
-                OutInfo.SemanticsTokens.push_back(NewToken);
+                MemberReference& Expr = NewComponent.AssignedMember.GetType<MemberReference>();
+                for(int i = 0; i < Expr.Names.size();i++)
+                {
+                    DefinitionsToken NewToken;
+                    NewToken.ByteOffset = Expr.PartByteOffsets[i];
+                    NewToken.Length = Expr.Names[i].size();
+                    NewToken.Type = DefinitionsTokenType::AssignedLHS;
+                    OutInfo.SemanticsTokens.push_back(NewToken);
+                }
             }
             if(ParseOffset >= DataSize)
             {
@@ -663,7 +676,7 @@ struct Hej1 : Hej2
                 ParseOffset++;
             }
             NewComponent.ReferencedRule = std::move(RuleExpression);
-            if(NewComponent.ReferencedRule.Names[0] == "TOKEN")
+            if(NewComponent.ReferencedRule.IsType<MemberReference>() && NewComponent.ReferencedRule.GetType<MemberReference>().Names[0] == "TOKEN")
             {
                 CurrentRule.MetaComponents.push_back({TotalComponents,std::move(NewComponent)});
             }
@@ -961,18 +974,23 @@ struct Hej1 : Hej2
     TypeInfo h_ResolveMemberTypeInfo(TypeInfo InitialType,StructDefinition const* CurrentStruct,MemberExpression& Member,size_t NameOffset,std::string& OutError,MBCCDefinitions const& Grammar)
     {
         TypeInfo ReturnValue = InitialType;
-        while(NameOffset < Member.Names.size())
+        if(Member.IsType<Literal>())
+        {
+            return Member.ResultType;
+        }
+        MemberReference& Expr = Member.GetType<MemberReference>();
+        while(NameOffset < Expr.Names.size())
         {
             if(Builtin(ReturnValue))
             {
-                OutError = "Struct "+h_GetPrintTypeName(Grammar,ReturnValue)+" has no member "+Member.Names[NameOffset];        
+                OutError = "Struct "+h_GetPrintTypeName(Grammar,ReturnValue)+" has no member "+Expr.Names[NameOffset];        
                 ReturnValue = -1;
                 break;
             }
-            StructMemberVariable const* CurrentMember = Grammar.TryGetMember(*CurrentStruct, Member.Names[NameOffset]);
+            StructMemberVariable const* CurrentMember = Grammar.TryGetMember(*CurrentStruct, Expr.Names[NameOffset]);
             if(CurrentMember == nullptr)
             {
-                OutError = "Struct "+CurrentStruct->Name+" has no member "+Member.Names[NameOffset];
+                OutError = "Struct "+CurrentStruct->Name+" has no member "+Expr.Names[NameOffset];
                 ReturnValue = -1;
                 break;
             }
@@ -1016,7 +1034,7 @@ struct Hej1 : Hej2
                 }
                 ReturnValue |= TypeFlags::List;
             }
-            Member.PartTypes[NameOffset] = ReturnValue;
+            Expr.PartTypes[NameOffset] = ReturnValue;
             NameOffset++;
         }
 
@@ -1027,12 +1045,12 @@ struct Hej1 : Hej2
         TypeInfo ReturnValue = 0;        
         StructDefinition const* CurrentScope = &StructScope;
         size_t NameOffset = 0;
-        if(Member.Names[0] == "this")
+        if(Member.GetType<MemberReference>().Names[0] == "this")
         {
             StructIndex Index = NameToStruct[CurrentScope->Name];
             //current struct always guaranteed to exist
             CurrentScope = &Structs[Index];
-            Member.PartTypes[0] = Index;
+            Member.GetType<MemberReference>().PartTypes[0] = Index;
             NameOffset+=1;
             ReturnValue = Index;
         }
@@ -1043,45 +1061,50 @@ struct Hej1 : Hej2
     TypeInfo MBCCDefinitions::p_GetRHSTypeInfo(MemberExpression& RHSExpression,int RHSMax,std::string& OutError)
     {
         TypeInfo ReturnValue = -1;
+        if(RHSExpression.IsType<Literal>())
+        {
+            return RHSExpression.ResultType;   
+        }
         size_t NameOffset = 0; 
         StructDefinition TokenStruct;
         TokenStruct.Name = "Token";
         StructMemberVariable Position = StructMemberVariable_tokenPosition();
         TokenStruct.MemberVariables.push_back(std::move(Position));
         StructDefinition const* CurrentScope = nullptr;
-        if(RHSExpression.Names[0] == "TOKEN")
+        MemberReference& Expr = RHSExpression.GetType<MemberReference>();
+        if(Expr.Names[0] == "TOKEN")
         {
             //can cover all cases here, slightly uggly
             CurrentScope = &TokenStruct;
-            RHSExpression.PartTypes[0] = TypeFlags::Token;
-            if(RHSExpression.Names.size() == 1)
+            Expr.PartTypes[0] = TypeFlags::Token;
+            if(Expr.Names.size() == 1)
             {
                 OutError = "Error in evaluating type of RHS: need to select member of TOKEN, TOKEN isn't a valid struct by itself";
                 return(-1);
             }
-            if(RHSExpression.Names.size() > 2)
+            if(Expr.Names.size() > 2)
             {
-                OutError = "Error in evaluating type of RHS: \""+RHSExpression.Names[2]+"\" isn't a valid member";
+                OutError = "Error in evaluating type of RHS: \""+Expr.Names[2]+"\" isn't a valid member";
                 return(-1);
             }
-            if(RHSExpression.Names[1] == "Position")
+            if(Expr.Names[1] == "Position")
             {
                 ReturnValue = TypeFlags::TokenPos;
-                RHSExpression.PartTypes[1] = TypeFlags::TokenPos;
+                Expr.PartTypes[1] = TypeFlags::TokenPos;
                 ReturnValue = TypeFlags::TokenPos;
             }
             else
             {
-                OutError = "Error in evaluating type of RHS: TOKEN has no member \""+RHSExpression.Names[1]+"\"";
+                OutError = "Error in evaluating type of RHS: TOKEN has no member \""+Expr.Names[1]+"\"";
                 return(-1);
             }
             NameOffset = 2;
         }
         else
         {
-            if(RHSExpression.Names.size() == 1)
+            if(Expr.Names.size() == 1)
             {
-                auto TermIt = NameToTerminal.find(RHSExpression.Names[0]);
+                auto TermIt = NameToTerminal.find(Expr.Names[0]);
                 if(TermIt != NameToTerminal.end())
                 {
                     ReturnValue = TypeFlags::String;
@@ -1089,21 +1112,21 @@ struct Hej1 : Hej2
             }
             if(ReturnValue == -1)
             {
-                auto NonTermIt = NameToNonTerminal.find(RHSExpression.Names[0]);   
+                auto NonTermIt = NameToNonTerminal.find(Expr.Names[0]);   
                 if(NonTermIt == NameToNonTerminal.end())
                 {
-                    OutError = "\""+RHSExpression.Names[0]+"\" in right hand isn't a valid nonterminal";
+                    OutError = "\""+Expr.Names[0]+"\" in right hand isn't a valid nonterminal";
                     return(-1);
                 }
                 if(NonTerminals[NonTermIt->second].AssociatedStruct == -1)
                 {
-                    OutError = "\""+RHSExpression.Names[0]+"\" in right hand doesn't have an associated struct, and can't be assigned";
+                    OutError = "\""+Expr.Names[0]+"\" in right hand doesn't have an associated struct, and can't be assigned";
                     return(-1);
                 }
                 ReturnValue = NonTerminals[NonTermIt->second].AssociatedStruct;
                 CurrentScope = &Structs[NonTerminals[NonTermIt->second].AssociatedStruct];
             }
-            RHSExpression.PartTypes[0] = ReturnValue;
+            Expr.PartTypes[0] = ReturnValue;
             NameOffset += 1;
         }
         ReturnValue = h_ResolveMemberTypeInfo(ReturnValue,CurrentScope,RHSExpression,NameOffset,OutError,*this);
@@ -1177,39 +1200,40 @@ struct Hej1 : Hej2
     }
     void MBCCDefinitions::p_VerifyComponent(RuleComponent& Component,std::string const& NonTermName,StructDefinition const* AssociatedStruct,bool& HasThisAssignment,bool& HasRegularAssignment,LSPInfo& OutInfo)
     {
-        if(Component.ReferencedRule.Names[0] == "TOKEN")
+        MemberReference& Lhs = Component.ReferencedRule.GetType<MemberReference>();
+        if(Lhs.Names[0] == "TOKEN")
         {
             Component.IsTerminal = true;
         }
-        else if(auto TermIt = NameToTerminal.find(Component.ReferencedRule.Names[0]); TermIt != NameToTerminal.end())
+        else if(auto TermIt = NameToTerminal.find(Lhs.Names[0]); TermIt != NameToTerminal.end())
         {
             Component.IsTerminal = true;
             Component.ComponentIndex = TermIt->second;
-            if(Component.ReferencedRule.Names.size() > 1)
+            if(Lhs.Names.size() > 1)
             {
-                OutInfo.Diagnostics.push_back(Diagnostic(Component.ReferencedRule.ByteOffset[0],Component.ReferencedRule.Names[0].size(),
-                        "terminal \""+Component.ReferencedRule.Names[0] + "\" has no member "
-                        " \""+Component.ReferencedRule.Names[1]+"\""));
+                OutInfo.Diagnostics.push_back(Diagnostic(Lhs.PartByteOffsets[0],Lhs.Names[0].size(),
+                        "terminal \""+Lhs.Names[0] + "\" has no member "
+                        " \""+Lhs.Names[1]+"\""));
             }
         }   
-        else if(auto NonTermIt = NameToNonTerminal.find(Component.ReferencedRule.Names[0]); NonTermIt != NameToNonTerminal.end())
+        else if(auto NonTermIt = NameToNonTerminal.find(Lhs.Names[0]); NonTermIt != NameToNonTerminal.end())
         {
             Component.IsTerminal = false;
             Component.ComponentIndex = NonTermIt->second;
-            if(Component.AssignedMember.Names.size() > 0)
+            if(!Component.AssignedMember.IsEmpty())
             {
                 if(NonTerminals[NonTermIt->second].AssociatedStruct == -1)
                 {
-                    OutInfo.Diagnostics.push_back(Diagnostic(Component.ReferencedRule.ByteOffset[0],Component.ReferencedRule.Names[0].size(),
+                    OutInfo.Diagnostics.push_back(Diagnostic(Lhs.PartByteOffsets[0],Lhs.Names[0].size(),
                             "assignment in non-terminal"+NonTermName +" but non-terminal doesn't have an associated struct"));
                 }
             }
         }
         else
         {
-            OutInfo.Diagnostics.push_back(Diagnostic(Component.ReferencedRule.ByteOffset[0],Component.ReferencedRule.Names[0].size(),
+            OutInfo.Diagnostics.push_back(Diagnostic(Lhs.PartByteOffsets[0],Lhs.Names[0].size(),
                     "rule referencing unkown terminal/non-terminal named"
-                    " \""+Component.ReferencedRule.Names[0]+"\""));
+                    " \""+Lhs.Names[0]+"\""));
         }
         if(OutInfo.Diagnostics.size() != 0)
         {
@@ -1217,11 +1241,11 @@ struct Hej1 : Hej2
         }
         if(AssociatedStruct != nullptr)
         {
-            if(Component.AssignedMember.Names.size() == 0)
+            if(Component.AssignedMember.IsEmpty())
             {
                 return;   
             }
-            if(Component.AssignedMember.Names[0] == "this")
+            if(Component.AssignedMember.GetType<MemberReference>().Names[0] == "this")
             {
                 HasThisAssignment = true;
             }
@@ -1232,9 +1256,9 @@ struct Hej1 : Hej2
             std::string Error;
             if(!p_IsAssignable(*AssociatedStruct,Component.AssignedMember,Component.ReferencedRule,Component.Max,Error))
             {
-                OutInfo.Diagnostics.push_back(Diagnostic(Component.ReferencedRule.ByteOffset[0],Component.ReferencedRule.Names[0].size(),
+                OutInfo.Diagnostics.push_back(Diagnostic(Lhs.PartByteOffsets[0],Lhs.Names[0].size(),
                         "Error in assignment of non terminal \""+NonTermName+"\": "
-                        "Error in assignment to member \""+Component.AssignedMember.Names[0]+"\": "
+                        "Error in assignment to member \""+Component.AssignedMember.GetType<MemberReference>().Names[0]+"\": "
                         +Error));
             }
         }
