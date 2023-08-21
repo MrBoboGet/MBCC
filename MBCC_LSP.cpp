@@ -119,6 +119,7 @@ namespace MBCC
         void MBCC_LSP::OpenedDocument(std::string const& URI,std::string const& Content)
         {
             m_OpenedDocuments[URI] = p_CreateDocumentData(Content);
+            p_PushDiagnostics(m_OpenedDocuments[URI],URI);
         }
         void MBCC_LSP::ClosedDocument(std::string const& URI)
         {

@@ -1,4 +1,5 @@
 #include "MBCC.h"
+#include "MBLSP/LSP_Structs.h"
 #include "MBUtility/MBErrorHandling.h"
 #include <assert.h>
 #include <iostream>
@@ -503,7 +504,7 @@ struct Hej1 : Hej2
     //    }
     //    return(ReturnValue);
     //}
-    MemberExpression MBCCDefinitions::p_ParseMemberExpression(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset, LSPInfo& OutInfo)
+    MemberExpression MBCCDefinitions::p_ParseMemberExpression(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset, int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo)
     {
         MemberExpression ReturnValue;
         size_t ParseOffset = InParseOffset;
@@ -511,26 +512,36 @@ struct Hej1 : Hej2
         while(ParseOffset < DataSize)
         {
             Identifier PartIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
-            //if(IsLHS)
-            //{
-            //    OutInfo.SemanticsTokens.push_back(DefinitionsToken(PartIdentifier,DefinitionsTokenType::Variable));   
-            //}
-            //else
-            //{
-            //    if(ReturnValue.PartTypes.size() == 0)
-            //    {
-            //        OutInfo.SemanticsTokens.push_back(DefinitionsToken(PartIdentifier,DefinitionsTokenType::Rule));   
-            //    }
-            //    else
-            //    {
-            //        OutInfo.SemanticsTokens.push_back(DefinitionsToken(PartIdentifier,DefinitionsTokenType::Variable));   
-            //    }
-            //}
             std::string NewPart = PartIdentifier.Value;
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             MemberExpr.Names.push_back(std::move(NewPart));
             MemberExpr.PartTypes.push_back(-1);
             MemberExpr.PartByteOffsets.push_back(PartIdentifier.ByteOffset);
+
+            if(ParseOffset < DataSize && Data[ParseOffset] == '(')
+            {
+                //in potential lambda declaration
+                if(MemberExpr.Names.size() != 1)
+                {
+                    throw MBCCParseError("Syntactic error parsing MBCC definitions: unexpected ( in MemberExpression",ParseOffset);
+                }
+                //first string is the type of the lambda, the rest is the actual lambda
+                Lambda NewLambda;
+                NewLambda.Type.Value = MemberExpr.Names[0];
+                NewLambda.Type.ByteOffset = MemberExpr.PartByteOffsets[0];
+
+                OutInfo.SemanticsTokens.push_back(DefinitionsToken(NewLambda.Type,DefinitionsTokenType::Class));
+                NewLambda.Name = p_LambdaIDToLambdaName(CurrentLambdaID);
+                CurrentLambdaID++;
+                ParseOffset += 1;
+                NewLambda.Rules = p_ParseParseRules(Data,DataSize,ParseOffset,&ParseOffset,')',CurrentLambdaID,OutLambdas,OutInfo);
+
+                MemberExpr.Names[0] = NewLambda.Name;
+                MemberExpr.PartByteOffsets[0] = 0;
+                OutLambdas.push_back(NewLambda);
+                MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
+            }
+
             if(ParseOffset < DataSize && Data[ParseOffset] == '.')
             {
                 ParseOffset+=1; 
@@ -547,19 +558,17 @@ struct Hej1 : Hej2
         *OutParseOffset = ParseOffset;
         return(ReturnValue);
     }
-    std::vector<ParseRule> MBCCDefinitions::p_ParseParseRules(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo)
+    std::string MBCCDefinitions::p_LambdaIDToLambdaName(int ID)
+    {
+        return "_L"+std::to_string(ID);
+    }
+    std::vector<ParseRule> MBCCDefinitions::p_ParseParseRules(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,char EndMarker,int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo)
     {
         std::vector<ParseRule> ReturnValue;
         size_t ParseOffset = InParseOffset;
-        MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
-        if(ParseOffset >= DataSize || Data[ParseOffset] != '=')
-        {
-            throw MBCCParseError("Syntactic error parsing MBCC definitions: rule needs delimiting = for name and content",ParseOffset);
-        }
-        ParseOffset +=1;
-        MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
         ParseRule CurrentRule;
         int TotalComponents = 0;
+        MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
         while(ParseOffset < DataSize)
         {
             //does allow for empty rules, s
@@ -582,7 +591,7 @@ struct Hej1 : Hej2
                 MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
                 continue;
             }
-            else if(Data[ParseOffset] == ';')
+            else if(Data[ParseOffset] == EndMarker)
             {
                 ParseOffset+=1;
                 break;
@@ -593,7 +602,11 @@ struct Hej1 : Hej2
             //    NewComponent.AssignOrder = p_ParseAssignOrder(Data,DataSize,ParseOffset,&ParseOffset);
             //    MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             //}
-            MemberExpression RuleExpression = p_ParseMemberExpression(Data,DataSize,ParseOffset,&ParseOffset,OutInfo);    
+            MemberExpression RuleExpression = p_ParseMemberExpression(Data,DataSize,ParseOffset,&ParseOffset,CurrentLambdaID,OutLambdas,OutInfo);    
+            if(OutLambdas.size() >  0)
+            {
+                throw MBCCParseError("Syntactic error parsing MBCC definitions: lambda only allowed as the right hand side in an assignment",ParseOffset);
+            }
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             if(ParseOffset >= DataSize)
             {
@@ -604,7 +617,7 @@ struct Hej1 : Hej2
                 //member assignment    
                 ParseOffset += 1;
                 NewComponent.AssignedMember = std::move(RuleExpression);
-                RuleExpression = p_ParseMemberExpression(Data,DataSize,ParseOffset,&ParseOffset,OutInfo);
+                RuleExpression = p_ParseMemberExpression(Data,DataSize,ParseOffset,&ParseOffset,CurrentLambdaID,OutLambdas,OutInfo);
                 MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             }
             else
@@ -853,12 +866,11 @@ struct Hej1 : Hej2
             {
                 return(&Member);
             }
-        }       
+        }
         if(StructDef.ParentStruct == "")
         {
-            throw std::runtime_error("Internal error verifying MBCC definitions: Structdefinition has no member with name \""+MemberName+"\"");   
-        }
-        assert(NameToStruct.find(StructDef.ParentStruct) != NameToStruct.end());
+            return nullptr;
+        }    
         return(TryGetMember(Structs[NameToStruct.at(StructDef.ParentStruct)],MemberName));
     }
     StructMemberVariable const& MBCCDefinitions::GetMember(StructDefinition const& StructDef,std::string const& MemberName) const
@@ -971,7 +983,7 @@ struct Hej1 : Hej2
         }
         return(ReturnValue);
     }
-    TypeInfo h_ResolveMemberTypeInfo(TypeInfo InitialType,StructDefinition const* CurrentStruct,MemberExpression& Member,size_t NameOffset,std::string& OutError,MBCCDefinitions const& Grammar)
+    TypeInfo h_ResolveMemberTypeInfo(TypeInfo InitialType,StructDefinition const* CurrentStruct,MemberExpression& Member,size_t NameOffset,LSPInfo& OutInfo,MBCCDefinitions const& Grammar)
     {
         TypeInfo ReturnValue = InitialType;
         if(Member.IsType<Literal>())
@@ -983,14 +995,18 @@ struct Hej1 : Hej2
         {
             if(Builtin(ReturnValue))
             {
-                OutError = "Struct "+h_GetPrintTypeName(Grammar,ReturnValue)+" has no member "+Expr.Names[NameOffset];        
+                //OutError = "Struct "+h_GetPrintTypeName(Grammar,ReturnValue)+" has no member "+Expr.Names[NameOffset];        
+                OutInfo.Diagnostics.push_back(Diagnostic(Expr.PartByteOffsets[NameOffset],Expr.Names[NameOffset].size(),
+                            "Struct "+h_GetPrintTypeName(Grammar,ReturnValue)+" has no member "+Expr.Names[NameOffset]));
                 ReturnValue = -1;
                 break;
             }
             StructMemberVariable const* CurrentMember = Grammar.TryGetMember(*CurrentStruct, Expr.Names[NameOffset]);
             if(CurrentMember == nullptr)
             {
-                OutError = "Struct "+CurrentStruct->Name+" has no member "+Expr.Names[NameOffset];
+                //OutError = "Struct "+CurrentStruct->Name+" has no member "+Expr.Names[NameOffset];
+                OutInfo.Diagnostics.push_back(Diagnostic(Expr.PartByteOffsets[NameOffset],Expr.Names[NameOffset].size(),
+                            "Struct "+CurrentStruct->Name+" has no member "+Expr.Names[NameOffset]));
                 ReturnValue = -1;
                 break;
             }
@@ -1040,7 +1056,7 @@ struct Hej1 : Hej2
 
         return(ReturnValue);
     }
-    TypeInfo MBCCDefinitions::p_GetMemberTypeInfo(StructDefinition const& StructScope,MemberExpression& Member,std::string& OutError)
+    TypeInfo MBCCDefinitions::p_GetMemberTypeInfo(StructDefinition const& StructScope,MemberExpression& Member,LSPInfo& OutInfo)
     {
         TypeInfo ReturnValue = 0;        
         StructDefinition const* CurrentScope = &StructScope;
@@ -1055,10 +1071,10 @@ struct Hej1 : Hej2
             ReturnValue = Index;
         }
         //ReturnValue = NameToStruct[CurrentScope->Name];
-        ReturnValue = h_ResolveMemberTypeInfo(ReturnValue,CurrentScope,Member,NameOffset,OutError,*this);
+        ReturnValue = h_ResolveMemberTypeInfo(ReturnValue,CurrentScope,Member,NameOffset,OutInfo,*this);
         return(ReturnValue);
     }
-    TypeInfo MBCCDefinitions::p_GetRHSTypeInfo(MemberExpression& RHSExpression,int RHSMax,std::string& OutError)
+    TypeInfo MBCCDefinitions::p_GetRHSTypeInfo(MemberExpression& RHSExpression,int RHSMax,LSPInfo& OutInfo)
     {
         TypeInfo ReturnValue = -1;
         if(RHSExpression.IsType<Literal>())
@@ -1079,12 +1095,16 @@ struct Hej1 : Hej2
             Expr.PartTypes[0] = TypeFlags::Token;
             if(Expr.Names.size() == 1)
             {
-                OutError = "Error in evaluating type of RHS: need to select member of TOKEN, TOKEN isn't a valid struct by itself";
+                //OutError = "Error in evaluating type of RHS: need to select member of TOKEN, TOKEN isn't a valid struct by itself";
+                OutInfo.Diagnostics.push_back(Diagnostic(Expr.PartByteOffsets[NameOffset],Expr.Names[NameOffset].size(),
+                            "Error in evaluating type of RHS: need to select member of TOKEN, TOKEN isn't a valid struct by itself"));
                 return(-1);
             }
             if(Expr.Names.size() > 2)
             {
-                OutError = "Error in evaluating type of RHS: \""+Expr.Names[2]+"\" isn't a valid member";
+                //OutError = "Error in evaluating type of RHS: \""+Expr.Names[2]+"\" isn't a valid member";
+                OutInfo.Diagnostics.push_back(Diagnostic(Expr.PartByteOffsets[NameOffset],Expr.Names[NameOffset].size(),
+                                "Error in evaluating type of RHS: \""+Expr.Names[2]+"\" isn't a valid member"));
                 return(-1);
             }
             if(Expr.Names[1] == "Position")
@@ -1095,7 +1115,9 @@ struct Hej1 : Hej2
             }
             else
             {
-                OutError = "Error in evaluating type of RHS: TOKEN has no member \""+Expr.Names[1]+"\"";
+                //OutError = "Error in evaluating type of RHS: TOKEN has no member \""+Expr.Names[1]+"\"";
+                OutInfo.Diagnostics.push_back(Diagnostic(Expr.PartByteOffsets[NameOffset],Expr.Names[NameOffset].size(),
+                                "Error in evaluating type of RHS: TOKEN has no member \""+Expr.Names[1]+"\""));
                 return(-1);
             }
             NameOffset = 2;
@@ -1115,12 +1137,16 @@ struct Hej1 : Hej2
                 auto NonTermIt = NameToNonTerminal.find(Expr.Names[0]);   
                 if(NonTermIt == NameToNonTerminal.end())
                 {
-                    OutError = "\""+Expr.Names[0]+"\" in right hand isn't a valid nonterminal";
+                    //OutError = "\""+Expr.Names[0]+"\" in right hand isn't a valid nonterminal";
+                    OutInfo.Diagnostics.push_back(Diagnostic(Expr.PartByteOffsets[NameOffset],Expr.Names[NameOffset].size(),
+                                    "\""+Expr.Names[0]+"\" in right hand isn't a valid nonterminal"));
                     return(-1);
                 }
                 if(NonTerminals[NonTermIt->second].AssociatedStruct == -1)
                 {
-                    OutError = "\""+Expr.Names[0]+"\" in right hand doesn't have an associated struct, and can't be assigned";
+                    //OutError = "\""+Expr.Names[0]+"\" in right hand doesn't have an associated struct, and can't be assigned";
+                    OutInfo.Diagnostics.push_back(Diagnostic(Expr.PartByteOffsets[NameOffset],Expr.Names[NameOffset].size(),
+                                "\""+Expr.Names[0]+"\" in right hand doesn't have an associated struct, and can't be assigned"));
                     return(-1);
                 }
                 ReturnValue = NonTerminals[NonTermIt->second].AssociatedStruct;
@@ -1129,28 +1155,30 @@ struct Hej1 : Hej2
             Expr.PartTypes[0] = ReturnValue;
             NameOffset += 1;
         }
-        ReturnValue = h_ResolveMemberTypeInfo(ReturnValue,CurrentScope,RHSExpression,NameOffset,OutError,*this);
+        ReturnValue = h_ResolveMemberTypeInfo(ReturnValue,CurrentScope,RHSExpression,NameOffset,OutInfo,*this);
         if(RHSMax == -1)
         {
             if(ReturnValue & TypeFlags::List)
             {
-                OutError = "Error in evaluating type of RHS: can only apply * to a type not of list";
+                //OutError = "Error in evaluating type of RHS: can only apply * to a type not of list";
+                OutInfo.Diagnostics.push_back(Diagnostic(Expr.PartByteOffsets[NameOffset],Expr.Names[NameOffset].size(),
+                                "Error in evaluating type of RHS: can only apply * to a type not of list"));
                 return(-1);
             } 
             ReturnValue |= TypeFlags::List;
         }
         return(ReturnValue);
     }
-    bool MBCCDefinitions::p_IsAssignable(StructDefinition const& StructScope,MemberExpression& StructExpression,MemberExpression& RHSExpression,int RHSMax,std::string& OutError)
+    bool MBCCDefinitions::p_IsAssignable(StructDefinition const& StructScope,MemberExpression& StructExpression,MemberExpression& RHSExpression,int RHSMax,LSPInfo& OutInfo)
     {
         bool ReturnValue = true;
-        TypeInfo LHSType = p_GetMemberTypeInfo(StructScope,StructExpression,OutError);
+        TypeInfo LHSType = p_GetMemberTypeInfo(StructScope,StructExpression,OutInfo);
         if(LHSType == -1)
         {
             return(false);   
         }
         StructExpression.ResultType = LHSType;
-        TypeInfo RHSType = p_GetRHSTypeInfo(RHSExpression,RHSMax,OutError);
+        TypeInfo RHSType = p_GetRHSTypeInfo(RHSExpression,RHSMax,OutInfo);
         if(RHSType == -1)
         {
             return(false);   
@@ -1163,7 +1191,8 @@ struct Hej1 : Hej2
         {
             std::string LHSName = h_GetPrintTypeName(*this,LHSType);
             std::string RHSName = h_GetPrintTypeName(*this,RHSType);
-            OutError  = "LHS has type "+LHSName+" and RHS has incompatible type "+RHSName;
+            OutInfo.Diagnostics.push_back(Diagnostic(StructExpression.GetType<MemberReference>().PartByteOffsets[0],StructExpression.GetType<MemberReference>().Names[0].size(),"LHS has type "+LHSName+" and RHS has incompatible type "+RHSName));
+            //OutError  = "LHS has type "+LHSName+" and RHS has incompatible type "+RHSName;
             ReturnValue = false;
         }
 
@@ -1253,14 +1282,11 @@ struct Hej1 : Hej2
             {
                 HasRegularAssignment = true;   
             }
-            std::string Error;
-            if(!p_IsAssignable(*AssociatedStruct,Component.AssignedMember,Component.ReferencedRule,Component.Max,Error))
-            {
-                OutInfo.Diagnostics.push_back(Diagnostic(Lhs.PartByteOffsets[0],Lhs.Names[0].size(),
-                        "Error in assignment of non terminal \""+NonTermName+"\": "
-                        "Error in assignment to member \""+Component.AssignedMember.GetType<MemberReference>().Names[0]+"\": "
-                        +Error));
-            }
+            p_IsAssignable(*AssociatedStruct,Component.AssignedMember,Component.ReferencedRule,Component.Max,OutInfo);
+                //OutInfo.Diagnostics.push_back(Diagnostic(Lhs.PartByteOffsets[0],Lhs.Names[0].size(),
+                //        "Error in assignment of non terminal \""+NonTermName+"\": "
+                //        "Error in assignment to member \""+Component.AssignedMember.GetType<MemberReference>().Names[0]+"\": "
+                //        +Error));
         }
     }
     //Parse def already verifies that all links between struct and non-terminal/terminal is true
@@ -1269,7 +1295,7 @@ struct Hej1 : Hej2
     {
         if(NonTerminals.size() == 0)
         {
-            OutInfo.Diagnostics.push_back(Diagnostic(0,5,"Skip regex is mandatory in order to construct tokenizer"));
+            //OutInfo.Diagnostics.push_back(Diagnostic(0,5,"Non-Ter"));
         }
         if(OutInfo.Diagnostics.size() == 0)
         {
@@ -1286,6 +1312,7 @@ struct Hej1 : Hej2
         size_t ParseOffset = InOffset; 
         MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
         std::vector<std::pair<Identifier,Identifier>> UnresolvedDefs;
+        int CurrentLamdaID = 1;
         while(ParseOffset < DataSize)
         {
             Identifier CurrentIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
@@ -1340,6 +1367,10 @@ struct Hej1 : Hej2
                     OutInfo.Diagnostics.push_back(Diagnostic(CurrentIdentifier,"there can only be one skip regex"));
                 }
                 MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
+                if(ParseOffset  >= DataSize || Data[ParseOffset] != '"')
+                {
+                    throw MBCCParseError("Syntax error parsing MBCCDefinitions: no regex after skip declaration",ParseOffset);   
+                }
                 DefinitionsToken NewToken;
                 NewToken.ByteOffset = ParseOffset;
                 MBError ParseError = true;
@@ -1360,8 +1391,19 @@ struct Hej1 : Hej2
             }
             else
             {
+                MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
+                if(ParseOffset >= DataSize || Data[ParseOffset] != '=')
+                {
+                    throw MBCCParseError("Syntactic error parsing MBCC definitions: rule needs delimiting = for name and content",ParseOffset);
+                }
+                ParseOffset +=1;
+                MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
+
+                std::vector<Lambda> Lambdas;
                 OutInfo.SemanticsTokens.push_back(DefinitionsToken(CurrentIdentifier,DefinitionsTokenType::NonTerminal));
-                std::vector<ParseRule> NewRules = p_ParseParseRules(Data,DataSize,ParseOffset,&ParseOffset,OutInfo);
+                std::vector<ParseRule> NewRules = p_ParseParseRules(Data,DataSize,ParseOffset,&ParseOffset,';',CurrentLamdaID,Lambdas,OutInfo);
+
+
                 NonTerminal NewTerminal;
                 NewTerminal.Rules = std::move(NewRules);
                 NewTerminal.Name = CurrentIdentifier.Value;
@@ -1385,6 +1427,24 @@ struct Hej1 : Hej2
                         ReturnValue.NameToNonTerminal[NewTerminal.Name] = CurrentIndex;
                         ReturnValue.NonTerminals.push_back(std::move(NewTerminal));
                     }
+                }
+
+                //lambdas are easier, they never collide with other lambdas,  and they never have the same name as another
+                //terminal/terminals
+                for(auto& NewLambda : Lambdas)
+                {
+                    NonTerminal NewNonTerminal;
+                    NewNonTerminal.Name = NewLambda.Name;
+                    NewNonTerminal.Rules = std::move(NewLambda.Rules);
+                    auto& LambdaID = ReturnValue.NameToNonTerminal[NewNonTerminal.Name];
+                    if(LambdaID == 0)
+                    {
+                        LambdaID = ReturnValue.NonTerminals.size();
+                    }
+                    Identifier TermName;
+                    TermName.Value = NewNonTerminal.Name;
+                    UnresolvedDefs.push_back({TermName,NewLambda.Type});
+                    ReturnValue.NonTerminals.push_back(std::move(NewNonTerminal));
                 }
             }
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);

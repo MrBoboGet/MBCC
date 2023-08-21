@@ -416,7 +416,7 @@ namespace MBCC
     struct Identifier
     {
         std::string Value;
-        size_t ByteOffset;
+        size_t ByteOffset = 0;
     };
 
     enum class DefinitionsTokenType
@@ -498,6 +498,16 @@ namespace MBCC
     class MBCCDefinitions
     {
     private:
+        //might need to introduce alias for rules, otherwise
+        //error in parsing lambdas result in completelty unreadable results
+        struct Lambda
+        {
+            Identifier Type;
+            std::string Name;
+            std::vector<ParseRule> Rules;
+        };
+        static std::string p_LambdaIDToLambdaName(int ID);
+
         void p_VerifyStructs(LSPInfo& OutInfo);
         //MEGA ugly, refactor
         void p_VerifyComponent(RuleComponent& ComponentToVerify,std::string const& NonTerminalName,StructDefinition const* AssociatedStruct,bool& ThisAssignment,bool& RegularAssignment,LSPInfo& OutInfo);
@@ -512,15 +522,14 @@ namespace MBCC
         static std::pair<Identifier,Identifier> p_ParseDef(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
         static StructMemberVariable p_ParseMemberVariable(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
         static StructDefinition p_ParseStruct(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
-        static MemberExpression p_ParseMemberExpression(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
-        static std::vector<ParseRule> p_ParseParseRules(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
-
+        static MemberExpression p_ParseMemberExpression(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo);
+        static std::vector<ParseRule> p_ParseParseRules(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,char EndMarker,int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo);
         
 
         bool p_IsAssignable(StructIndex Lhs,StructIndex Rhs);
-        TypeInfo p_GetMemberTypeInfo(StructDefinition const& StructScope,MemberExpression& Member,std::string& OutError);
-        TypeInfo p_GetRHSTypeInfo(MemberExpression& RHSExpression,int RHSMax,std::string& OutError);
-        bool p_IsAssignable(StructDefinition const& StructScope,MemberExpression& StructExpression,MemberExpression& RHSExpression,int LHSMax,std::string& OutError);
+        TypeInfo p_GetMemberTypeInfo(StructDefinition const& StructScope,MemberExpression& Member,LSPInfo& OutInfo);
+        TypeInfo p_GetRHSTypeInfo(MemberExpression& RHSExpression,int RHSMax,LSPInfo& OutInfo);
+        bool p_IsAssignable(StructDefinition const& StructScope,MemberExpression& StructExpression,MemberExpression& RHSExpression,int LHSMax,LSPInfo& OutInfo);
     public:
         std::vector<Terminal> Terminals;
         std::vector<NonTerminal> NonTerminals;
