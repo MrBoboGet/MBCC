@@ -534,7 +534,7 @@ namespace MBCC
         }
         return ReturnValue;
     }
-    std::string CPPParserGenerator::p_GetLHSMember(MBCCDefinitions const& Grammar,NonTerminal const& AssociatedNonTerminal,ParseRule const& Production ,RuleComponent const& ComponentToInspect,std::string& Delayed)
+    std::string CPPParserGenerator::p_GetLHSMember(MBCCDefinitions const& Grammar,NonTerminal const& AssociatedNonTerminal,ParseRule const& Production ,RuleComponent const& ComponentToInspect,DelayedInfo& Delayed)
     {
         std::string ReturnValue;
         if(ComponentToInspect.AssignedMember.IsEmpty())
@@ -543,6 +543,10 @@ namespace MBCC
         }
         std::string MemberAccessString;
         MemberReference const& Expr = ComponentToInspect.AssignedMember.GetType<MemberReference>();
+        if(Expr.Names[0] == "this")
+        {
+            return "ReturnValue";
+        }
         if(AssociatedNonTerminal.AssociatedStruct != -1 && Grammar.DepInfo.HasChildren(AssociatedNonTerminal.AssociatedStruct))
         {
             MemberAccessString += ".GetBase()";
@@ -550,7 +554,7 @@ namespace MBCC
         for(int i = 0; i < Expr.Names.size();i++)
         {
             MemberAccessString  += "."+Expr.Names[i];
-            if(!Builtin(Expr.PartTypes[i]) && Grammar.DepInfo.HasChildren(Expr.PartTypes[i]))
+            if(i + 1 < Expr.Names.size() && !Builtin(Expr.PartTypes[i]) && Grammar.DepInfo.HasChildren(Expr.PartTypes[i]))
             {
                 MemberAccessString += ".GetBase()";
             }
@@ -562,8 +566,9 @@ namespace MBCC
         else
         {
             std::string NewVarName = p_GetUniqueName();
-            ReturnValue = p_GetTypeString(Grammar,ComponentToInspect.ReferencedRule.ResultType)+ " "+NewVarName+";\n";
-            Delayed = MemberAccessString;
+            ReturnValue = NewVarName;
+            Delayed.TempVar  = NewVarName;
+            Delayed.AccessString = MemberAccessString;
         }
         return ReturnValue;
     }
@@ -588,18 +593,37 @@ namespace MBCC
         std::string ReturnValue;
         if(ComponentToInspect.IsTerminal && !(ComponentToInspect.Max == 1 && ComponentToInspect.Min == 1))
         {
-            ReturnValue = "Tokenizer.Peek().Type == " + std::to_string(ComponentToInspect.ComponentIndex) + ")";
+            ReturnValue = "Tokenizer.Peek().Type == " + std::to_string(ComponentToInspect.ComponentIndex);
         }
-        else
+        else if(!ComponentToInspect.IsTerminal)
         {
             ReturnValue = p_GetLOOKPredicate(ComponentToInspect.ComponentIndex);
         }
 
         return ReturnValue;
     }
-    std::string CPPParserGenerator::p_GetBody(MBCCDefinitions const& Grammar,NonTerminal const& AssociatedNonTerminal,ParseRule const& Production ,RuleComponent const& ComponentToWrite,std::string& DelayedString)
+    std::string CPPParserGenerator::p_GetBody(MBCCDefinitions const& Grammar,NonTerminal const& AssociatedNonTerminal,ParseRule const& Production ,RuleComponent const& ComponentToWrite,DelayedInfo& DelayedString)
     {
         std::string ReturnValue;
+
+        //only check if not in an optional or * 
+        if(ComponentToWrite.Max == 1 && ComponentToWrite.Min == 1 || (ComponentToWrite.Min == 1 && ComponentToWrite.Max == -1))
+        {
+            if(ComponentToWrite.IsTerminal)
+            {
+                ReturnValue = "if(Tokenizer.Peek().Type != " + std::to_string(ComponentToWrite.ComponentIndex) +
+                    ")\n{\nthrow MBCC::ParsingException(Tokenizer.Peek().Position,\""+AssociatedNonTerminal.Name+"\",\""
+                    +Grammar.Terminals[ComponentToWrite.ComponentIndex].Name +"\""+
+                    ");\n}\n";
+            }
+            else
+            {
+                ReturnValue = "if(!(" + p_GetLOOKPredicate(ComponentToWrite.ComponentIndex) + "))"+
+                    "\n{\nthrow MBCC::ParsingException(Tokenizer.Peek().Position,\""+AssociatedNonTerminal.Name+"\",\""
+                    +Grammar.Terminals[ComponentToWrite.ComponentIndex].Name +"\""+
+                    ");\n}\n";
+            }
+        }
         std::string LhsString = p_GetLHSMember(Grammar,AssociatedNonTerminal,Production,ComponentToWrite,DelayedString);
         std::string RhsString = p_GetRHSString(Grammar,ComponentToWrite);
         if(!ComponentToWrite.AssignedMember.IsEmpty())
@@ -607,19 +631,16 @@ namespace MBCC
             if( ComponentToWrite.Max == -1 || 
                     ((ComponentToWrite.AssignedMember.ResultType & TypeFlags::List) && !(ComponentToWrite.ReferencedRule.ResultType & TypeFlags::List)))
             {
-                ReturnValue = LhsString+".push_back("+RhsString+");\n";
+                ReturnValue += LhsString+".push_back("+RhsString+");\n";
             }
             else
             {
-                ReturnValue = LhsString + " = " + RhsString + ";\n";
+                ReturnValue += LhsString + " = " + RhsString + ";\n";
             }
         }
-        else if(ComponentToWrite.IsTerminal && (ComponentToWrite.Max == 1 && ComponentToWrite.Min == 1))
+        else
         { 
-            ReturnValue = "if(Tokenizer.Peek().Type != " + std::to_string(ComponentToWrite.ComponentIndex) +
-                ")\n{\nthrow MBCC::ParsingException(Tokenizer.Peek().Position,\""+AssociatedNonTerminal.Name+"\",\""
-                +Grammar.Terminals[ComponentToWrite.ComponentIndex].Name +"\""+
-                    ");\n}\n";
+            ReturnValue += RhsString+";\n";
         }
         if(ComponentToWrite.IsTerminal)
         {
@@ -630,15 +651,15 @@ namespace MBCC
     void CPPParserGenerator::p_WriteRuleComponent(MBCCDefinitions const& Grammar,NonTerminal const& AssociatedNonTerminal,ParseRule const& Production ,RuleComponent const& ComponentToWrite, 
             MBUtility::MBOctetOutputStream& OutStream, std::vector<std::pair<std::string,std::string>>& DelayedAssignments)
     {
-        std::string DelayedMember;
+        DelayedInfo DelayedMember;
         std::string Body = p_GetBody(Grammar,AssociatedNonTerminal,Production,ComponentToWrite,DelayedMember);
         std::string CondType = p_GetCondType(Grammar,ComponentToWrite);
         std::string CondExpression = p_GetCondExpression(Grammar,ComponentToWrite);
 
-        if(DelayedMember != "")
+        if(DelayedMember.TempVar != "")
         {
-            DelayedAssignments.push_back( {DelayedMember,ComponentToWrite.AssignedMember.GetType<MemberReference>().Names[0]});
-            OutStream<<p_GetTypeString(Grammar,ComponentToWrite.AssignedMember.ResultType)<<" "<<ComponentToWrite.AssignedMember.GetType<MemberReference>().Names[0]<<";\n";
+            DelayedAssignments.push_back( {DelayedMember.AccessString,DelayedMember.TempVar});
+            OutStream<<p_GetTypeString(Grammar,ComponentToWrite.AssignedMember.ResultType)<<" "<<DelayedMember.TempVar<<";\n";
         }
         if(CondType == "")
         {

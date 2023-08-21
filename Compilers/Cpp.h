@@ -18,13 +18,19 @@ namespace MBCC
         void p_WriteNonTerminalFunction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTerminal, MBUtility::MBOctetOutputStream& SourceOut);
 
         int m_CurrentNameIndex = 0;
+
+        struct DelayedInfo
+        {
+            std::string TempVar;
+            std::string AccessString;
+        };
         std::string p_GetUniqueName();
         std::string p_GetRHSString(MBCCDefinitions const& Grammar,RuleComponent const& ComponentToInspect);
-        std::string p_GetLHSMember(MBCCDefinitions const& Grammar,NonTerminal const& AssociatedNonTerminal,ParseRule const& Production ,RuleComponent const& ComponentToInspect,std::string& Delayed);
+        std::string p_GetLHSMember(MBCCDefinitions const& Grammar,NonTerminal const& AssociatedNonTerminal,ParseRule const& Production ,RuleComponent const& ComponentToInspect,DelayedInfo& Delayed);
         std::string p_GetCondType(MBCCDefinitions const& Grammar,RuleComponent const& ComponentToInspect);
         std::string p_GetCondExpression(MBCCDefinitions const& Grammar,RuleComponent const& ComponentToInspect);
 
-        std::string p_GetBody(MBCCDefinitions const& Grammar,NonTerminal const& AssociatedNonTerminal,ParseRule const& Production ,RuleComponent const& ComponentToInspect,std::string& Delayed);
+        std::string p_GetBody(MBCCDefinitions const& Grammar,NonTerminal const& AssociatedNonTerminal,ParseRule const& Production ,RuleComponent const& ComponentToInspect,DelayedInfo& Delayed);
         void p_WriteRuleComponent(MBCCDefinitions const& Grammar,
                                   NonTerminal const& AssociatedNonTerminal,
                                   ParseRule const& Production ,

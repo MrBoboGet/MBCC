@@ -507,6 +507,7 @@ struct Hej1 : Hej2
     {
         MemberExpression ReturnValue;
         size_t ParseOffset = InParseOffset;
+        MemberReference& MemberExpr = ReturnValue.SetType<MemberReference>();
         while(ParseOffset < DataSize)
         {
             Identifier PartIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
@@ -527,7 +528,6 @@ struct Hej1 : Hej2
             //}
             std::string NewPart = PartIdentifier.Value;
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
-            MemberReference& MemberExpr = ReturnValue.SetType<MemberReference>();
             MemberExpr.Names.push_back(std::move(NewPart));
             MemberExpr.PartTypes.push_back(-1);
             MemberExpr.PartByteOffsets.push_back(PartIdentifier.ByteOffset);
@@ -613,7 +613,7 @@ struct Hej1 : Hej2
                 {
                     throw MBCCParseError("Syntactic error parsing MBCC definitions: Literal only allowed in assignment",ParseOffset);
                 }
-                if(RuleExpression.IsType<MemberReference>() && RuleExpression.GetType<MemberReference>().Names.size() > 0)
+                if(RuleExpression.IsType<MemberReference>() && RuleExpression.GetType<MemberReference>().Names.size() > 1)
                 {
                     throw MBCCParseError("Syntactic error parsing MBCC definitions: Rule member expression only allowed in member assignment",ParseOffset);
                 }    
