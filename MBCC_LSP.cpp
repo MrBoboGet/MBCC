@@ -79,6 +79,14 @@ namespace MBCC
                 {
                     NewToken.Type = MBLSP::TokenType::Property;
                 }
+                else if(Token.Type == DefinitionsTokenType::Bool)
+                {
+                    NewToken.Type = MBLSP::TokenType::Number;
+                }
+                else if(Token.Type == DefinitionsTokenType::Number)
+                {
+                    NewToken.Type = MBLSP::TokenType::Number;
+                }
                 ReturnValue.SemanticTokens.push_back(NewToken);
             }
             for(auto const& Diagnostic : Info.Diagnostics)

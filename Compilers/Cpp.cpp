@@ -168,9 +168,9 @@ namespace MBCC
                     HeaderOut << Member.GetType<StructMemberVariable_Raw>().RawMemberType<<" ";
                 }
                 HeaderOut<<Member.GetName();
-                if(Member.GetDefaultValue() != "")
+                if(Member.GetDefaultValue().Value != "")
                 {
-                    HeaderOut<<" = "<<Member.GetDefaultValue();   
+                    HeaderOut<<" = "<<Member.GetDefaultValue().Value; 
                 }
                 HeaderOut <<";\n";
             }         

@@ -23,6 +23,11 @@
 namespace MBCC
 {
 
+    struct Identifier
+    {
+        std::string Value;
+        size_t ByteOffset = 0;
+    };
     template<typename T>
     int GetTypeBegin()
     {
@@ -143,9 +148,8 @@ namespace MBCC
     {
     public:
         std::string Name; 
-        std::string DefaultValue;
+        Identifier DefaultValue;
         size_t BeginOffset = 0;
-        size_t DefaultValueByteOffset = 0;
     };
     class StructMemberVariable_List : public MemberVariable
     {
@@ -200,9 +204,9 @@ namespace MBCC
         StructMemberVariable(StructMemberVariable_String StructMemberVariable);
         StructMemberVariable(StructMemberVariable_tokenPosition StructMemberVariable);
         std::string& GetName();
-        std::string& GetDefaultValue();
+        Identifier& GetDefaultValue();
         std::string const& GetName() const;
-        std::string const& GetDefaultValue() const;
+        Identifier const& GetDefaultValue() const;
 
         MemberVariable& GetBase()
         {
@@ -386,8 +390,7 @@ namespace MBCC
             if(Line < Rhs.Line)
             {
                 ReturnValue = true;    
-            }
-            else if(Line == Rhs.Line)
+            } else if(Line == Rhs.Line)
             {
                 ReturnValue = ByteOffset < Rhs.ByteOffset;
             }
@@ -413,11 +416,6 @@ namespace MBCC
         }
     };
     
-    struct Identifier
-    {
-        std::string Value;
-        size_t ByteOffset = 0;
-    };
 
     enum class DefinitionsTokenType
     {
@@ -430,13 +428,21 @@ namespace MBCC
         Variable,
         AssignedRHS,
         AssignedLHS,
-        String
+        String,
+        Bool,
+        Number,
     };
     struct DefinitionsToken
     {
         DefinitionsToken()
         {
                
+        }
+        DefinitionsToken(size_t NewByteOffset,int NewLength,DefinitionsTokenType NewType)
+        {
+            ByteOffset = NewByteOffset;
+            Length = NewLength;
+            Type = NewType;
         }
         DefinitionsToken(Identifier const& IdentifierToConvert,DefinitionsTokenType NewType)
         {

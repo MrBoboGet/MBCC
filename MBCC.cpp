@@ -83,9 +83,9 @@ namespace MBCC
                 return(x.Name);      
             }, m_Content));
     }
-    std::string& StructMemberVariable::GetDefaultValue()
+    Identifier& StructMemberVariable::GetDefaultValue()
     {
-        return(std::visit([&](MemberVariable& x) -> std::string& 
+        return(std::visit([&](MemberVariable& x) -> Identifier& 
             {
                 return(x.DefaultValue);      
             }, m_Content));
@@ -97,9 +97,9 @@ namespace MBCC
                 return(x.Name);      
             }, m_Content));
     }
-    std::string const& StructMemberVariable::GetDefaultValue() const
+    Identifier const& StructMemberVariable::GetDefaultValue() const
     {
-        return(std::visit([&](MemberVariable const& x) -> std::string const& 
+        return(std::visit([&](MemberVariable const& x) -> Identifier const& 
             {
                 return(x.DefaultValue);      
             }, m_Content));
@@ -348,17 +348,14 @@ namespace MBCC
         {
             ParseOffset +=1;
             //ReturnValue.GetType<MemberVariable>().DefaultValueByteOffset = ParseOffset;
-            ReturnValue.Visit([&](MemberVariable& var)
-                    {
-                        var.DefaultValueByteOffset = ParseOffset;
-                    });
             //A little bit of a hack, but doesnt require the parsing of any particular data
             size_t ValueEnd = std::find(Data+ParseOffset,Data+DataSize,';')-Data;
             if(ValueEnd >= DataSize)
             {
                 throw MBCCParseError("Syntactic error parsing MBCC definitions: member variable needs delimiting ; for default value",ParseOffset);   
             }
-            ReturnValue.GetDefaultValue() = std::string(Data+ParseOffset,Data+ValueEnd);
+            ReturnValue.GetDefaultValue().Value = std::string(Data+ParseOffset,Data+ValueEnd);
+            ReturnValue.GetDefaultValue().ByteOffset = ParseOffset;
             ParseOffset = ValueEnd+1; 
         }
         else
@@ -504,14 +501,58 @@ struct Hej1 : Hej2
     //    }
     //    return(ReturnValue);
     //}
+    bool h_IsNumber(std::string_view String)
+    {
+        bool ReturnValue = true;
+        for(int i = 0; i < String.size();i++)
+        {
+            if ( !( (i == 0 && String[0] == '-') || (String[i] >= '0' && String[i] < '9')))
+            {
+                return false;
+            }
+        }
+        return ReturnValue;
+    }
     MemberExpression MBCCDefinitions::p_ParseMemberExpression(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset, int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo)
     {
         MemberExpression ReturnValue;
         size_t ParseOffset = InParseOffset;
         MemberReference& MemberExpr = ReturnValue.SetType<MemberReference>();
+        MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
         while(ParseOffset < DataSize)
         {
+            if(Data[ParseOffset] == '"')
+            {
+                MBError Error = true;
+                size_t StringBegin = ParseOffset;
+                std::string QuotedString = MBParsing::ParseQuotedString(Data,DataSize,ParseOffset,&ParseOffset,&Error);
+                if(!Error)
+                {
+                    throw  MBCCParseError("Error parsing quoted string: "+Error.ErrorMessage,ParseOffset);   
+                }
+                ReturnValue.SetType<Literal>().LiteralString = QuotedString;
+                ReturnValue.ResultType = TypeFlags::String;
+                OutInfo.SemanticsTokens.push_back(DefinitionsToken(StringBegin,QuotedString.size()+2,DefinitionsTokenType::String));
+                break;
+            }
+
             Identifier PartIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
+
+            if(PartIdentifier.Value == "true" || PartIdentifier.Value == "false")
+            {
+                ReturnValue.ResultType = TypeFlags::Bool;
+                ReturnValue.SetType<Literal>().LiteralString = PartIdentifier.Value;
+                OutInfo.SemanticsTokens.push_back(DefinitionsToken(PartIdentifier,DefinitionsTokenType::Bool));
+                break;
+            }
+            if(h_IsNumber(PartIdentifier.Value))
+            {   
+                ReturnValue.ResultType = TypeFlags::Int;
+                ReturnValue.SetType<Literal>().LiteralString = PartIdentifier.Value;
+                OutInfo.SemanticsTokens.push_back(DefinitionsToken(PartIdentifier,DefinitionsTokenType::Number));
+                break;
+            }
+
             std::string NewPart = PartIdentifier.Value;
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             MemberExpr.Names.push_back(std::move(NewPart));
@@ -748,18 +789,16 @@ struct Hej1 : Hej2
                             NewMember.Name = MemberVariable.GetName();
                             NewMember.DefaultValue = MemberVariable.GetDefaultValue();
                             NewMember.BeginOffset = MemberVariable.GetBase().BeginOffset;
-                            NewMember.DefaultValueByteOffset = MemberVariable.GetBase().DefaultValueByteOffset;
-                            if(NewMember.DefaultValue != "")
+                            if(NewMember.DefaultValue.Value != "")
                             {
                                 try
                                 {
-                                    NewMember.Value = std::stoi(NewMember.DefaultValue);
+                                    NewMember.Value = std::stoi(NewMember.DefaultValue.Value);
+                                    OutInfo.SemanticsTokens.push_back(DefinitionsToken(NewMember.DefaultValue,DefinitionsTokenType::Number));
                                 }
                                 catch(std::exception const& e)
                                 {
-                                    OutInfo.Diagnostics.push_back(Diagnostic(
-                                              MemberVariable.GetType<StructMemberVariable_Struct>().DefaultValueByteOffset,
-                                              MemberVariable.GetType<StructMemberVariable_Struct>().DefaultValue.size(),
+                                    OutInfo.Diagnostics.push_back(Diagnostic(NewMember.DefaultValue,
                                               "Int member variable not a valid integer"));
                                 }
                             }
@@ -768,13 +807,12 @@ struct Hej1 : Hej2
                         else if(StructMember.StructType == "string")
                         {
                             StructMemberVariable_String NewMember;
-                            NewMember.Value = MemberVariable.GetDefaultValue();
+                            NewMember.Value = MemberVariable.GetDefaultValue().Value;
                             NewMember.DefaultValue = MemberVariable.GetDefaultValue();
                             NewMember.Name = MemberVariable.GetName();
                             NewMember.BeginOffset = MemberVariable.GetBase().BeginOffset;
-                            NewMember.DefaultValueByteOffset = MemberVariable.GetBase().DefaultValueByteOffset;
                             MemberVariable = StructMemberVariable(NewMember);
-                               
+                            OutInfo.SemanticsTokens.push_back(DefinitionsToken(NewMember.DefaultValue,DefinitionsTokenType::String));
                         }
                         else if(StructMember.StructType == "bool")
                         {
@@ -782,26 +820,24 @@ struct Hej1 : Hej2
                             NewMember.DefaultValue = MemberVariable.GetDefaultValue();
                             NewMember.Name = MemberVariable.GetName();
                             NewMember.BeginOffset = MemberVariable.GetBase().BeginOffset;
-                            NewMember.DefaultValueByteOffset = MemberVariable.GetBase().DefaultValueByteOffset;
-                            if(NewMember.DefaultValue != "")
+                            if(NewMember.DefaultValue.Value != "")
                             {
                                 size_t Offset = 0;
-                                MBParsing::SkipWhitespace(NewMember.DefaultValue,0,&Offset);
-                                if(NewMember.DefaultValue.size() -Offset == 4 && std::memcmp(NewMember.DefaultValue.data()+Offset,"true",4) == 0)
+                                MBParsing::SkipWhitespace(NewMember.DefaultValue.Value,0,&Offset);
+                                if(NewMember.DefaultValue.Value.size() -Offset == 4 && std::memcmp(NewMember.DefaultValue.Value.data()+Offset,"true",4) == 0)
                                 {
                                     NewMember.Value = true;   
                                 }
-                                else if(NewMember.DefaultValue.size() -Offset == 5 && std::memcmp(NewMember.DefaultValue.data()+Offset,"false",5) == 0)
+                                else if(NewMember.DefaultValue.Value.size() -Offset == 5 && std::memcmp(NewMember.DefaultValue.Value.data()+Offset,"false",5) == 0)
                                 {
                                     NewMember.Value = false;   
                                 }
                                 else
                                 {
-                                    OutInfo.Diagnostics.push_back(Diagnostic(
-                                              MemberVariable.GetType<StructMemberVariable_Struct>().DefaultValueByteOffset,
-                                              MemberVariable.GetType<StructMemberVariable_Struct>().DefaultValue.size(),
-                                              "invalid default value for bool type: "+NewMember.DefaultValue));
+                                    OutInfo.Diagnostics.push_back(Diagnostic(NewMember.DefaultValue,
+                                              "invalid default value for bool type: "+NewMember.DefaultValue.Value));
                                 }
+                                OutInfo.SemanticsTokens.push_back(DefinitionsToken(NewMember.DefaultValue,DefinitionsTokenType::Bool));
                             }
                             MemberVariable = StructMemberVariable(NewMember);
                         }
@@ -811,12 +847,9 @@ struct Hej1 : Hej2
                             NewMember.DefaultValue = MemberVariable.GetDefaultValue();
                             NewMember.Name = MemberVariable.GetName();
                             NewMember.BeginOffset = MemberVariable.GetBase().BeginOffset;
-                            NewMember.DefaultValueByteOffset = MemberVariable.GetBase().DefaultValueByteOffset;
-                            if(NewMember.DefaultValue != "")
+                            if(NewMember.DefaultValue.Value != "")
                             {
-                                OutInfo.Diagnostics.push_back(Diagnostic(
-                                              MemberVariable.GetType<StructMemberVariable_Struct>().DefaultValueByteOffset,
-                                              MemberVariable.GetType<StructMemberVariable_Struct>().DefaultValue.size(),
+                                OutInfo.Diagnostics.push_back(Diagnostic(NewMember.DefaultValue,
                                               "tokenPos cannot have a default type"));
                             }
                             MemberVariable = std::move(NewMember);
@@ -1229,40 +1262,43 @@ struct Hej1 : Hej2
     }
     void MBCCDefinitions::p_VerifyComponent(RuleComponent& Component,std::string const& NonTermName,StructDefinition const* AssociatedStruct,bool& HasThisAssignment,bool& HasRegularAssignment,LSPInfo& OutInfo)
     {
-        MemberReference& Lhs = Component.ReferencedRule.GetType<MemberReference>();
-        if(Lhs.Names[0] == "TOKEN")
+        if(Component.ReferencedRule.IsType<MemberReference>())
         {
-            Component.IsTerminal = true;
-        }
-        else if(auto TermIt = NameToTerminal.find(Lhs.Names[0]); TermIt != NameToTerminal.end())
-        {
-            Component.IsTerminal = true;
-            Component.ComponentIndex = TermIt->second;
-            if(Lhs.Names.size() > 1)
+            MemberReference& Rhs = Component.ReferencedRule.GetType<MemberReference>();
+            if(Rhs.Names[0] == "TOKEN")
             {
-                OutInfo.Diagnostics.push_back(Diagnostic(Lhs.PartByteOffsets[0],Lhs.Names[0].size(),
-                        "terminal \""+Lhs.Names[0] + "\" has no member "
-                        " \""+Lhs.Names[1]+"\""));
+                Component.IsTerminal = true;
             }
-        }   
-        else if(auto NonTermIt = NameToNonTerminal.find(Lhs.Names[0]); NonTermIt != NameToNonTerminal.end())
-        {
-            Component.IsTerminal = false;
-            Component.ComponentIndex = NonTermIt->second;
-            if(!Component.AssignedMember.IsEmpty())
+            else if(auto TermIt = NameToTerminal.find(Rhs.Names[0]); TermIt != NameToTerminal.end())
             {
-                if(NonTerminals[NonTermIt->second].AssociatedStruct == -1)
+                Component.IsTerminal = true;
+                Component.ComponentIndex = TermIt->second;
+                if(Rhs.Names.size() > 1)
                 {
-                    OutInfo.Diagnostics.push_back(Diagnostic(Lhs.PartByteOffsets[0],Lhs.Names[0].size(),
-                            "assignment in non-terminal"+NonTermName +" but non-terminal doesn't have an associated struct"));
+                    OutInfo.Diagnostics.push_back(Diagnostic(Rhs.PartByteOffsets[0],Rhs.Names[0].size(),
+                                "terminal \""+Rhs.Names[0] + "\" has no member "
+                                " \""+Rhs.Names[1]+"\""));
+                }
+            }   
+            else if(auto NonTermIt = NameToNonTerminal.find(Rhs.Names[0]); NonTermIt != NameToNonTerminal.end())
+            {
+                Component.IsTerminal = false;
+                Component.ComponentIndex = NonTermIt->second;
+                if(!Component.AssignedMember.IsEmpty())
+                {
+                    if(NonTerminals[NonTermIt->second].AssociatedStruct == -1)
+                    {
+                        OutInfo.Diagnostics.push_back(Diagnostic(Rhs.PartByteOffsets[0],Rhs.Names[0].size(),
+                                    "assignment in non-terminal"+NonTermName +" but non-terminal doesn't have an associated struct"));
+                    }
                 }
             }
-        }
-        else
-        {
-            OutInfo.Diagnostics.push_back(Diagnostic(Lhs.PartByteOffsets[0],Lhs.Names[0].size(),
-                    "rule referencing unkown terminal/non-terminal named"
-                    " \""+Lhs.Names[0]+"\""));
+            else
+            {
+                OutInfo.Diagnostics.push_back(Diagnostic(Rhs.PartByteOffsets[0],Rhs.Names[0].size(),
+                            "rule referencing unkown terminal/non-terminal named"
+                            " \""+Rhs.Names[0]+"\""));
+            }
         }
         if(OutInfo.Diagnostics.size() != 0)
         {
