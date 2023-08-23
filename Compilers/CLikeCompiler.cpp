@@ -67,6 +67,8 @@ namespace MBCC
         ReturnValue += "}";
         return(ReturnValue);
     }
+    //Probably the only function that needs to know about the special property that the look for all terminals are one greater than the 
+    //number of non terminals, the last representing the EOF
     void CLikeParser::p_WriteLOOKTable(std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,MBUtility::MBOctetOutputStream& SourceOut)
     {
         //Assumes that zero non terminals is invalid
@@ -132,6 +134,15 @@ namespace MBCC
     }
     std::string CLikeParser::p_GetLHSMember(MBCCDefinitions const& Grammar,NonTerminal const& AssociatedNonTerminal,ParseRule const& Production ,RuleComponent const& ComponentToInspect,DelayedInfo& Delayed)
     {
+        if(ComponentToInspect.AssignedMember.IsEmpty())
+        {
+            return "";
+        }
+        MemberReference const& Expr = ComponentToInspect.AssignedMember.GetType<MemberReference>();
+        if(Expr.Names[0] == "this")
+        {
+            return "ReturnValue";   
+        }
         std::string ReturnValue = m_Adapter->GetLHSMember(Grammar,AssociatedNonTerminal,Production,ComponentToInspect);
         if(!Production.NeedsAssignmentOrder)
         {
@@ -237,7 +248,7 @@ namespace MBCC
         {
             ReturnValueType = AssoicatedStruct->Name;
         }
-        MBUtility::WriteData(SourceOut,ReturnValueType+" Parse"+AssociatedNonTerminal.Name+"(" + m_Adapter->GetFunctionArguments() +"\n{\n");
+        MBUtility::WriteData(SourceOut,ReturnValueType+" Parse"+AssociatedNonTerminal.Name+"(" + m_Adapter->GetFunctionArguments() +")\n{\n");
         SourceOut<<ReturnValueType<<" ReturnValue;\n";
         if(AssociatedNonTerminal.Rules.size() > 1)
         {
@@ -293,7 +304,7 @@ namespace MBCC
         {
             ReturnValueType = AssoicatedStruct->Name;
         }
-        MBUtility::WriteData(SourceOut,ReturnValueType+" "+FunctionName+"(" + m_Adapter->GetFunctionArguments() + "\n{\n");
+        MBUtility::WriteData(SourceOut,ReturnValueType+" "+FunctionName+"(" + m_Adapter->GetFunctionArguments() + ")\n{\n");
         if(AssociatedNonTerminal.AssociatedStruct != -1)
         {
             MBUtility::WriteData(SourceOut,AssoicatedStruct->Name + " ReturnValue;\n");
@@ -328,8 +339,18 @@ namespace MBCC
         }
         MBUtility::WriteData(SourceOut,"return(ReturnValue);\n}\n");
     }
-    void CLikeParser::WriteNonTerminalFunctions(MBCCDefinitions  const& Grammar,MBUtility::MBOctetOutputStream& SourceOut)
+    void CLikeParser::WriteNonTerminalFunctions(MBCCDefinitions  const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,MBUtility::MBOctetOutputStream& SourceOut)
     {
-       
+        p_WriteLOOKTable(ProductionsLOOk, SourceOut);
+        //MBUtility::WriteData(SourceOut,"#include <MBParsing/MBCC.h>\n");
+        //Order we write C/C++/C# implementations dont matter, we can just write them directly
+        for(NonTerminalIndex i = 0; i < Grammar.NonTerminals.size();i++)
+        {
+            p_WriteNonTerminalFunction(Grammar,i,SourceOut);     
+            for(int j = 0; j < Grammar.NonTerminals[i].Rules.size();j++)
+            {
+                p_WriteNonTerminalProduction(Grammar,i,j,"Parse"+Grammar.NonTerminals[i].Name+"_"+std::to_string(j),SourceOut); 
+            }
+        }       
     }
 }

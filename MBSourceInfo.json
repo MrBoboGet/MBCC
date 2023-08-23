@@ -20,7 +20,9 @@
             "Sources": 
             [
                 "/MBCC.cpp",
-                "/Compilers/Cpp.cpp"
+                "/Compilers/Cpp.cpp",
+                "/Compilers/CLikeCompiler.cpp",
+                "/Compilers/CSharp.cpp"
             ],
             "TargetType":"Library"
         },
@@ -31,6 +33,8 @@
             [
                 "/MBCC.cpp",
                 "/Compilers/Cpp.cpp",
+                "/Compilers/CSharp.cpp",
+                "/Compilers/CLikeCompiler.cpp",
                 "/MBCC_CLI.cpp",
                 "/MBCC_Main.cpp"
             ],
@@ -42,8 +46,10 @@
             "Sources": 
             [
                 "/MBCC.cpp",
-                "/Compilers/Cpp.cpp",
                 "/MBCC_LSP.cpp",
+                "/Compilers/Cpp.cpp",
+                "/Compilers/CSharp.cpp",
+                "/Compilers/CLikeCompiler.cpp",
                 "/MBCC_LSPMain.cpp"
             ],
             "TargetType":"Executable"

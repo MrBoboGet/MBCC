@@ -54,6 +54,10 @@ private:
         void p_WriteNonTerminalProduction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTerminal,int ProductionIndex,std::string const& FunctionName,MBUtility::MBOctetOutputStream& SourceOut);
 
 public:
-        void WriteNonTerminalFunctions(MBCCDefinitions  const& Grammar,MBUtility::MBOctetOutputStream& SourceOut);
+        void SetAdapter(CLikeAdapter* Adapter)
+        {
+            m_Adapter = Adapter;   
+        }
+        void WriteNonTerminalFunctions(MBCCDefinitions  const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,MBUtility::MBOctetOutputStream& SourceOut);
     };
 }
