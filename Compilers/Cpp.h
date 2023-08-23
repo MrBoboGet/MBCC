@@ -31,6 +31,8 @@ namespace MBCC
         std::string p_GetCondExpression(MBCCDefinitions const& Grammar,RuleComponent const& ComponentToInspect);
 
         std::string p_GetBody(MBCCDefinitions const& Grammar,NonTerminal const& AssociatedNonTerminal,ParseRule const& Production ,RuleComponent const& ComponentToInspect,DelayedInfo& Delayed);
+
+
         void p_WriteRuleComponent(MBCCDefinitions const& Grammar,
                                   NonTerminal const& AssociatedNonTerminal,
                                   ParseRule const& Production ,

@@ -11,6 +11,7 @@
 
 
 #include "Compilers/Cpp.h"
+#include "Compilers/CSharp.h"
 namespace MBCC
 {
     TypeInfo BuiltinToType(std::string const& BuiltinType)
@@ -2014,6 +2015,7 @@ struct Hej1 : Hej2
     ParserCompilerHandler::ParserCompilerHandler()
     {
         m_Compilers["cpp"] = std::make_unique<CPPParserGenerator>();
+        m_Compilers["csharp"] = std::make_unique<CSharpParserGenerator>();
     }
     std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> ParserCompilerHandler::CalculateProductionsLinearApproxLOOK(MBCCDefinitions const& Grammar,
     std::vector<bool> const& ERules,GLA const& GrammarGLA,int k)
