@@ -109,20 +109,20 @@ namespace MBCC
         {
             std::vector<std::string> NewEntry;
             NewEntry.reserve(CurrentProduction.size()+1);
-            std::string CombinedString = "LOOKTable["+std::to_string(CurrentProductionIndex)+"][0][Tokenizer.Peek().Type]";
+            std::string CombinedString = "LOOKTable"+ m_Adapter->GetLookIndex(std::to_string(CurrentProductionIndex),"0","Tokenizer.Peek().Type");
             for(int k = 1; k < LOOKDepth;k++)
             {
-                CombinedString +=  "&& LOOKTable["+std::to_string(CurrentProductionIndex)+"]["+std::to_string(k)+"][Tokenizer.Peek("+std::to_string(k)+").Type]";
+                CombinedString +=  "&& LOOKTable"+m_Adapter->GetLookIndex(std::to_string(CurrentProductionIndex),std::to_string(k),"Tokenizer.Peek("+std::to_string(k)+").Type");
             }
             CurrentProductionIndex += 1;
             assert(CombinedString.size() != 0);
             NewEntry.push_back(CombinedString);
             for(int j = 0; j < CurrentProduction.size();j++)
             {
-                std::string NewString = "LOOKTable["+std::to_string(CurrentProductionIndex)+"][0][Tokenizer.Peek().Type]";
+                std::string NewString = "LOOKTable"+ m_Adapter->GetLookIndex(std::to_string(CurrentProductionIndex),"0","Tokenizer.Peek().Type");
                 for(int k = 1; k < LOOKDepth;k++)
                 {
-                    NewString +=  "&& LOOKTable["+std::to_string(CurrentProductionIndex)+"]["+std::to_string(k)+"][Tokenizer.Peek("+std::to_string(k)+").Type]";
+                    NewString +=  "&& LOOKTable"+ m_Adapter->GetLookIndex(std::to_string(CurrentProductionIndex),std::to_string(k),"Tokenizer.Peek("+std::to_string(k)+").Type");
                 }
                 assert(NewString.size() != 0);
                 NewEntry.push_back(NewString);
@@ -203,7 +203,7 @@ namespace MBCC
                 ReturnValue += m_Adapter->GetThrowExpectedException(AssociatedNonTerminal.Name,Grammar.Terminals[ComponentToWrite.ComponentIndex].Name);
                 ReturnValue += "\n}\n";
             }
-            else
+            else if(!ComponentToWrite.ReferencedRule.IsType<Literal>())
             {
                 ReturnValue = "if(!(" + p_GetLOOKPredicate(ComponentToWrite.ComponentIndex) + "))\n{\n"+
                     m_Adapter->GetThrowExpectedException(AssociatedNonTerminal.Name,Grammar.Terminals[ComponentToWrite.ComponentIndex].Name)+
@@ -224,7 +224,7 @@ namespace MBCC
                 ReturnValue += LhsString + " = " + RhsString + ";\n";
             }
         }
-        else
+        else if(RhsString != "")
         { 
             ReturnValue += RhsString+";\n";
         }
@@ -248,8 +248,15 @@ namespace MBCC
         {
             ReturnValueType = AssoicatedStruct->Name;
         }
+        SourceOut<<m_Adapter->GetFunctionPrefix();
         MBUtility::WriteData(SourceOut,ReturnValueType+" Parse"+AssociatedNonTerminal.Name+"(" + m_Adapter->GetFunctionArguments() +")\n{\n");
-        SourceOut<<ReturnValueType<<" ReturnValue;\n";
+        SourceOut<<ReturnValueType<<" ReturnValue";
+        std::string InitString = m_Adapter->VariableInitializationString(ReturnValueType);
+        if(InitString != "")
+        {
+            SourceOut << " = "<<InitString;   
+        }
+        SourceOut<<";\n";
         if(AssociatedNonTerminal.Rules.size() > 1)
         {
             for(int i = 0; i < AssociatedNonTerminal.Rules.size();i++)
@@ -304,10 +311,18 @@ namespace MBCC
         {
             ReturnValueType = AssoicatedStruct->Name;
         }
+        SourceOut<<m_Adapter->GetFunctionPrefix();
         MBUtility::WriteData(SourceOut,ReturnValueType+" "+FunctionName+"(" + m_Adapter->GetFunctionArguments() + ")\n{\n");
         if(AssociatedNonTerminal.AssociatedStruct != -1)
         {
-            MBUtility::WriteData(SourceOut,AssoicatedStruct->Name + " ReturnValue;\n");
+            SourceOut<<ReturnValueType<<" ReturnValue";
+            std::string InitString = m_Adapter->VariableInitializationString(ReturnValueType);
+            if(InitString != "")
+            {
+                SourceOut << " = "<<InitString;   
+            }
+            SourceOut<<";\n";
+            //MBUtility::WriteData(SourceOut,AssoicatedStruct->Name + " ReturnValue;\n");
         }
         //first = member, second = name
         std::vector<std::pair<std::string,std::string>> DelayedAssignments;

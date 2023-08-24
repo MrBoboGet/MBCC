@@ -1,3 +1,4 @@
+#pragma once
 #include "../MBCC.h"
 
 namespace MBCC
@@ -18,6 +19,16 @@ namespace MBCC
         virtual std::string GetFunctionArguments() = 0;
         virtual std::string ListAddFunc() = 0;
         virtual std::string GetLookTableVariable(int TotalProductionSize,int LookDepth,int TerminalCount) = 0;
+        virtual std::string GetLookIndex(std::string First,std::string Second,std::string Third) = 0;
+        virtual std::string GetFunctionPrefix()
+        {
+            return "";   
+        }
+        virtual std::string VariableInitializationString(std::string const& VariableTypeString)
+        {
+            return "";   
+        }
+
     };
     class CLikeParser
     {
@@ -59,5 +70,34 @@ public:
             m_Adapter = Adapter;   
         }
         void WriteNonTerminalFunctions(MBCCDefinitions  const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,MBUtility::MBOctetOutputStream& SourceOut);
+
+        static std::string LiteralEscapeString(std::string const& StringToEscape)
+        {
+            std::string ReturnValue;
+            if(StringToEscape.empty())
+            {
+                return(ReturnValue);   
+            }
+            size_t ParseOffset = 0;
+            while(ParseOffset < StringToEscape.size())
+            {
+                size_t NextSlash = StringToEscape.find('\\', ParseOffset);
+                size_t NextQuote = StringToEscape.find('"',ParseOffset);
+                size_t NextEscape = std::min(NextSlash,NextQuote);
+                if(NextEscape == StringToEscape.npos)
+                {
+                    ReturnValue.insert(ReturnValue.end(),StringToEscape.data()+ParseOffset,StringToEscape.data()+StringToEscape.size());
+                    break;
+                }
+                else
+                {
+                    ReturnValue.insert(ReturnValue.end(),StringToEscape.data()+ParseOffset,StringToEscape.data()+NextEscape);
+                    ReturnValue += '\\';
+                    ReturnValue += StringToEscape[NextEscape];
+                    ParseOffset = NextEscape+1;
+                }
+            }
+            return("\"" +ReturnValue+"\"");
+        }
     };
 }

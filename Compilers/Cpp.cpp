@@ -46,34 +46,6 @@ namespace MBCC
         ReturnValue += "}";
         return(ReturnValue);
     }
-    std::string h_CppLiteralEscapeString(std::string const& StringToEscape)
-    {
-        std::string ReturnValue;
-        if(StringToEscape.empty())
-        {
-            return(ReturnValue);   
-        }
-        size_t ParseOffset = 0;
-        while(ParseOffset < StringToEscape.size())
-        {
-            size_t NextSlash = StringToEscape.find('\\', ParseOffset);
-            size_t NextQuote = StringToEscape.find('"',ParseOffset);
-            size_t NextEscape = std::min(NextSlash,NextQuote);
-            if(NextEscape == StringToEscape.npos)
-            {
-                ReturnValue.insert(ReturnValue.end(),StringToEscape.data()+ParseOffset,StringToEscape.data()+StringToEscape.size());
-                break;
-            }
-            else
-            {
-                ReturnValue.insert(ReturnValue.end(),StringToEscape.data()+ParseOffset,StringToEscape.data()+NextEscape);
-                ReturnValue += '\\';
-                ReturnValue += StringToEscape[NextEscape];
-                ParseOffset = NextEscape+1;
-            }
-        }
-        return(ReturnValue);
-    }
     int h_UpdateInheritanceOrder(int CurrentOffset,StructIndex CurrentStruct,DependancyInfo const& DepInfo,std::vector<int>& OutBegin,std::vector<int>& OutEnd)
     {
         int OriginalOffset = CurrentOffset;
@@ -275,10 +247,10 @@ namespace MBCC
         DependancyInfo DepInfo = Grammar.DepInfo;
         h_WriteStructures(Grammar,DepInfo,HeaderOut);
         p_WriteFunctionHeaders(Grammar,HeaderOut);
-        HeaderOut<<"inline MBCC::Tokenizer GetTokenizer()\n{\nMBCC::Tokenizer ReturnValue(\""+h_CppLiteralEscapeString(Grammar.SkipRegex)+"\",{"; 
+        HeaderOut<<"inline MBCC::Tokenizer GetTokenizer()\n{\nMBCC::Tokenizer ReturnValue("+CLikeParser::LiteralEscapeString(Grammar.SkipRegex)+",{"; 
         for(auto const& Terminal : Grammar.Terminals)
         {
-            HeaderOut<<"\""<<h_CppLiteralEscapeString(Terminal.RegexDefinition)<<"\",";   
+            HeaderOut<<CLikeParser::LiteralEscapeString(Terminal.RegexDefinition)<<",";   
         }
         HeaderOut <<"});\nreturn(ReturnValue);\n}";
     }
@@ -425,5 +397,9 @@ namespace MBCC
     std::string CPPParserGenerator::GetLookTableVariable(int TotalProductionSize,int LookDepth,int TerminalCount) 
     {
         return "const bool LOOKTable["+std::to_string(TotalProductionSize)+"]["+std::to_string(LookDepth)+"]["+std::to_string(TerminalCount)+"]";
+    }
+    std::string CPPParserGenerator::GetLookIndex(std::string First,std::string Second,std::string Third)
+    {
+        return "["+First+"]["+Second+"]["+Third+"]";
     }
 }

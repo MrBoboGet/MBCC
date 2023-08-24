@@ -24,6 +24,7 @@ namespace MBCC
         virtual std::string GetFunctionArguments() override;
         virtual std::string ListAddFunc() override;
         virtual std::string GetLookTableVariable(int TotalProductionSize,int LookDepth,int TerminalCount) override;
+        virtual std::string GetLookIndex(std::string First,std::string Second,std::string Third) override;
 
 
 

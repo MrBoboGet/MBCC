@@ -17,7 +17,8 @@ Literal ParseLiteral(MBCC::Tokenizer& Tokenizer)
     }
     else
     {
-         throw MBCC::ParsingException(Tokenizer.Peek().Position,"Literal","Literal");
+        throw MBCC::ParsingException(Tokenizer.Peek().Position,"Literal","Literal");
+        
     }
     return(ReturnValue);
 }
@@ -27,6 +28,7 @@ Literal ParseLiteral_0(MBCC::Tokenizer& Tokenizer)
     if(!(LOOKTable[4][0][Tokenizer.Peek().Type]&& LOOKTable[4][1][Tokenizer.Peek(1).Type]))
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"Literal","RPar");
+        
     }
     ReturnValue = ParseLiteral_Bool(Tokenizer);
     return(ReturnValue);
@@ -37,6 +39,7 @@ Literal ParseLiteral_1(MBCC::Tokenizer& Tokenizer)
     if(!(LOOKTable[6][0][Tokenizer.Peek().Type]&& LOOKTable[6][1][Tokenizer.Peek(1).Type]))
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"Literal","lcurl");
+        
     }
     ReturnValue = ParseLiteral_Number(Tokenizer);
     return(ReturnValue);
@@ -47,6 +50,7 @@ Literal ParseLiteral_2(MBCC::Tokenizer& Tokenizer)
     if(!(LOOKTable[8][0][Tokenizer.Peek().Type]&& LOOKTable[8][1][Tokenizer.Peek(1).Type]))
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"Literal","rcurl");
+        
     }
     ReturnValue = ParseLiteral_String(Tokenizer);
     return(ReturnValue);
@@ -63,6 +67,7 @@ Literal_Bool ParseLiteral_Bool_0(MBCC::Tokenizer& Tokenizer)
     if(Tokenizer.Peek().Type != 13)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"Literal_Bool","bool");
+        
     }
     ReturnValue.Value = Tokenizer.Peek().Value == "true";
     Tokenizer.ConsumeToken();
@@ -80,6 +85,7 @@ Literal_Number ParseLiteral_Number_0(MBCC::Tokenizer& Tokenizer)
     if(Tokenizer.Peek().Type != 11)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"Literal_Number","number");
+        
     }
     ReturnValue.Value = std::stoi(Tokenizer.Peek().Value);
     Tokenizer.ConsumeToken();
@@ -97,6 +103,7 @@ Literal_String ParseLiteral_String_0(MBCC::Tokenizer& Tokenizer)
     if(Tokenizer.Peek().Type != 12)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"Literal_String","string");
+        
     }
     ReturnValue.Value = Tokenizer.Peek().Value;
     Tokenizer.ConsumeToken();
@@ -114,11 +121,13 @@ DefaultValue ParseDefaultValue_0(MBCC::Tokenizer& Tokenizer)
     if(Tokenizer.Peek().Type != 19)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"DefaultValue","eq");
+        
     }
     Tokenizer.ConsumeToken();
     if(!(LOOKTable[0][0][Tokenizer.Peek().Type]&& LOOKTable[0][1][Tokenizer.Peek(1).Type]))
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"DefaultValue","LPar");
+        
     }
     ReturnValue.Value = ParseLiteral(Tokenizer);
     return(ReturnValue);
@@ -136,7 +145,8 @@ Attribute ParseAttribute(MBCC::Tokenizer& Tokenizer)
     }
     else
     {
-         throw MBCC::ParsingException(Tokenizer.Peek().Position,"Attribute","Attribute");
+        throw MBCC::ParsingException(Tokenizer.Peek().Position,"Attribute","Attribute");
+        
     }
     return(ReturnValue);
 }
@@ -146,8 +156,10 @@ Attribute ParseAttribute_0(MBCC::Tokenizer& Tokenizer)
     if(!(LOOKTable[15][0][Tokenizer.Peek().Type]&& LOOKTable[15][1][Tokenizer.Peek(1).Type]))
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"Attribute","drsquare");
+        
     }
-    ParseAttribute_Flag(Tokenizer)return(ReturnValue);
+    ParseAttribute_Flag(Tokenizer);
+    return(ReturnValue);
 }
 Attribute ParseAttribute_1(MBCC::Tokenizer& Tokenizer)
 {
@@ -155,8 +167,10 @@ Attribute ParseAttribute_1(MBCC::Tokenizer& Tokenizer)
     if(!(LOOKTable[17][0][Tokenizer.Peek().Type]&& LOOKTable[17][1][Tokenizer.Peek(1).Type]))
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"Attribute","rsquare");
+        
     }
-    ParseAttribute_Value(Tokenizer)return(ReturnValue);
+    ParseAttribute_Value(Tokenizer);
+    return(ReturnValue);
 }
 Attribute_Flag ParseAttribute_Flag(MBCC::Tokenizer& Tokenizer)
 {
@@ -170,6 +184,7 @@ Attribute_Flag ParseAttribute_Flag_0(MBCC::Tokenizer& Tokenizer)
     if(Tokenizer.Peek().Type != 14)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"Attribute_Flag","idf");
+        
     }
     ReturnValue.Name = Tokenizer.Peek().Value;
     Tokenizer.ConsumeToken();
@@ -187,17 +202,20 @@ Attribute_Value ParseAttribute_Value_0(MBCC::Tokenizer& Tokenizer)
     if(Tokenizer.Peek().Type != 14)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"Attribute_Value","idf");
+        
     }
     ReturnValue.Name = Tokenizer.Peek().Value;
     Tokenizer.ConsumeToken();
     if(Tokenizer.Peek().Type != 19)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"Attribute_Value","eq");
+        
     }
     Tokenizer.ConsumeToken();
     if(Tokenizer.Peek().Type != 12)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"Attribute_Value","string");
+        
     }
     ReturnValue.Value = Tokenizer.Peek().Value;
     Tokenizer.ConsumeToken();
@@ -215,6 +233,7 @@ Attribute ParseAttributeArgument_0(MBCC::Tokenizer& Tokenizer)
     if(!(LOOKTable[12][0][Tokenizer.Peek().Type]&& LOOKTable[12][1][Tokenizer.Peek(1).Type]))
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"AttributeArgument","lsquare");
+        
     }
     ReturnValue = ParseAttribute(Tokenizer);
     if(Tokenizer.Peek().Type == 18)
@@ -236,6 +255,7 @@ AttributeList ParseAttributeList_0(MBCC::Tokenizer& Tokenizer)
     if(Tokenizer.Peek().Type != 4)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"AttributeList","dlsquare");
+        
     }
     Tokenizer.ConsumeToken();
     while(LOOKTable[19][0][Tokenizer.Peek().Type]&& LOOKTable[19][1][Tokenizer.Peek(1).Type])
@@ -246,6 +266,7 @@ AttributeList ParseAttributeList_0(MBCC::Tokenizer& Tokenizer)
     if(Tokenizer.Peek().Type != 6)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"AttributeList","drsquare");
+        
     }
     Tokenizer.ConsumeToken();
     return(ReturnValue);
@@ -263,7 +284,8 @@ MemberDefinition ParseMemberDefinition_Base(MBCC::Tokenizer& Tokenizer)
     }
     else
     {
-         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_Base","MemberDefinition_Base");
+        throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_Base","MemberDefinition_Base");
+        
     }
     return(ReturnValue);
 }
@@ -273,6 +295,7 @@ MemberDefinition ParseMemberDefinition_Base_0(MBCC::Tokenizer& Tokenizer)
     if(!(LOOKTable[26][0][Tokenizer.Peek().Type]&& LOOKTable[26][1][Tokenizer.Peek(1).Type]))
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_Base","number");
+        
     }
     ReturnValue = ParseMemberDefinition_Struct(Tokenizer);
     return(ReturnValue);
@@ -283,6 +306,7 @@ MemberDefinition ParseMemberDefinition_Base_1(MBCC::Tokenizer& Tokenizer)
     if(!(LOOKTable[28][0][Tokenizer.Peek().Type]&& LOOKTable[28][1][Tokenizer.Peek(1).Type]))
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_Base","string");
+        
     }
     ReturnValue = ParseMemberDefinition_List(Tokenizer);
     return(ReturnValue);
@@ -299,12 +323,14 @@ MemberDefinition_Struct ParseMemberDefinition_Struct_0(MBCC::Tokenizer& Tokenize
     if(Tokenizer.Peek().Type != 14)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_Struct","idf");
+        
     }
     ReturnValue.StructType = Tokenizer.Peek().Value;
     Tokenizer.ConsumeToken();
     if(Tokenizer.Peek().Type != 14)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_Struct","idf");
+        
     }
     ReturnValue.Name = Tokenizer.Peek().Value;
     Tokenizer.ConsumeToken();
@@ -322,27 +348,32 @@ MemberDefinition_List ParseMemberDefinition_List_0(MBCC::Tokenizer& Tokenizer)
     if(Tokenizer.Peek().Type != 9)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_List","list");
+        
     }
     Tokenizer.ConsumeToken();
     if(Tokenizer.Peek().Type != 15)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_List","less");
+        
     }
     Tokenizer.ConsumeToken();
     if(Tokenizer.Peek().Type != 14)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_List","idf");
+        
     }
     ReturnValue.ListType = Tokenizer.Peek().Value;
     Tokenizer.ConsumeToken();
     if(Tokenizer.Peek().Type != 16)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_List","great");
+        
     }
     Tokenizer.ConsumeToken();
     if(Tokenizer.Peek().Type != 14)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_List","idf");
+        
     }
     ReturnValue.Name = Tokenizer.Peek().Value;
     Tokenizer.ConsumeToken();
@@ -365,7 +396,8 @@ MemberDefinition ParseMemberDefinition_Member(MBCC::Tokenizer& Tokenizer)
     }
     else
     {
-         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_Member","MemberDefinition_Member");
+        throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_Member","MemberDefinition_Member");
+        
     }
     return(ReturnValue);
 }
@@ -375,6 +407,7 @@ MemberDefinition ParseMemberDefinition_Member_0(MBCC::Tokenizer& Tokenizer)
     if(!(LOOKTable[23][0][Tokenizer.Peek().Type]&& LOOKTable[23][1][Tokenizer.Peek(1).Type]))
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_Member","semicolon");
+        
     }
     ReturnValue = ParseMemberDefinition_Base(Tokenizer);
     DefaultValue MBCC_TempVar0;
@@ -386,6 +419,7 @@ MemberDefinition ParseMemberDefinition_Member_0(MBCC::Tokenizer& Tokenizer)
     if(Tokenizer.Peek().Type != 10)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_Member","semicolon");
+        
     }
     Tokenizer.ConsumeToken();
     ReturnValue.GetBase().DefValue = std::move(MBCC_TempVar0);
@@ -397,11 +431,13 @@ MemberDefinition ParseMemberDefinition_Member_1(MBCC::Tokenizer& Tokenizer)
     if(Tokenizer.Peek().Type != 5)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_Member","lsquare");
+        
     }
     Tokenizer.ConsumeToken();
     if(!(LOOKTable[23][0][Tokenizer.Peek().Type]&& LOOKTable[23][1][Tokenizer.Peek(1).Type]))
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_Member","semicolon");
+        
     }
     ReturnValue = ParseMemberDefinition_Base(Tokenizer);
     DefaultValue MBCC_TempVar1;
@@ -413,11 +449,13 @@ MemberDefinition ParseMemberDefinition_Member_1(MBCC::Tokenizer& Tokenizer)
     if(Tokenizer.Peek().Type != 7)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_Member","rsquare");
+        
     }
     Tokenizer.ConsumeToken();
     if(Tokenizer.Peek().Type != 10)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_Member","semicolon");
+        
     }
     Tokenizer.ConsumeToken();
     ReturnValue.GetBase().DefValue = std::move(MBCC_TempVar1);
@@ -430,11 +468,13 @@ MemberDefinition ParseMemberDefinition_Member_2(MBCC::Tokenizer& Tokenizer)
     if(Tokenizer.Peek().Type != 20)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_Member","que");
+        
     }
     Tokenizer.ConsumeToken();
     if(!(LOOKTable[23][0][Tokenizer.Peek().Type]&& LOOKTable[23][1][Tokenizer.Peek(1).Type]))
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_Member","semicolon");
+        
     }
     ReturnValue = ParseMemberDefinition_Base(Tokenizer);
     DefaultValue MBCC_TempVar2;
@@ -446,6 +486,7 @@ MemberDefinition ParseMemberDefinition_Member_2(MBCC::Tokenizer& Tokenizer)
     if(Tokenizer.Peek().Type != 10)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition_Member","semicolon");
+        
     }
     Tokenizer.ConsumeToken();
     ReturnValue.GetBase().DefValue = std::move(MBCC_TempVar2);
@@ -470,6 +511,7 @@ MemberDefinition ParseMemberDefinition_0(MBCC::Tokenizer& Tokenizer)
     if(!(LOOKTable[30][0][Tokenizer.Peek().Type]&& LOOKTable[30][1][Tokenizer.Peek(1).Type]))
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"MemberDefinition","bool");
+        
     }
     ReturnValue = ParseMemberDefinition_Member(Tokenizer);
     ReturnValue.GetBase().Attributes = std::move(MBCC_TempVar3);
@@ -487,11 +529,13 @@ Inheritance ParseInheritance_0(MBCC::Tokenizer& Tokenizer)
     if(Tokenizer.Peek().Type != 17)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"Inheritance","colon");
+        
     }
     Tokenizer.ConsumeToken();
     if(Tokenizer.Peek().Type != 14)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"Inheritance","idf");
+        
     }
     ReturnValue.Name = Tokenizer.Peek().Value;
     Tokenizer.ConsumeToken();
@@ -514,11 +558,13 @@ StructDefinition ParseStructDefinition_0(MBCC::Tokenizer& Tokenizer)
     if(Tokenizer.Peek().Type != 8)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"StructDefinition","struct");
+        
     }
     Tokenizer.ConsumeToken();
     if(Tokenizer.Peek().Type != 14)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"StructDefinition","idf");
+        
     }
     ReturnValue.Name = Tokenizer.Peek().Value;
     Tokenizer.ConsumeToken();
@@ -530,6 +576,7 @@ StructDefinition ParseStructDefinition_0(MBCC::Tokenizer& Tokenizer)
     if(Tokenizer.Peek().Type != 2)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"StructDefinition","lcurl");
+        
     }
     Tokenizer.ConsumeToken();
     while(LOOKTable[34][0][Tokenizer.Peek().Type]&& LOOKTable[34][1][Tokenizer.Peek(1).Type])
@@ -540,6 +587,7 @@ StructDefinition ParseStructDefinition_0(MBCC::Tokenizer& Tokenizer)
     if(Tokenizer.Peek().Type != 3)
     {
         throw MBCC::ParsingException(Tokenizer.Peek().Position,"StructDefinition","rcurl");
+        
     }
     Tokenizer.ConsumeToken();
     return(ReturnValue);
