@@ -244,6 +244,10 @@ namespace MBCC
         }
         ParseOffset+=1;
         MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
+        if(ParseOffset >= DataSize || Data[ParseOffset] != '"')
+        {
+            throw MBCCParseError("Syntactic error parsing MBCC definitions: term regex must begin with \"",ParseOffset);
+        }
         MBError ParseStringResult = true;
         DefinitionsToken NewToken;
         NewToken.ByteOffset = ParseOffset;
@@ -644,11 +648,8 @@ struct Hej1 : Hej2
             //    NewComponent.AssignOrder = p_ParseAssignOrder(Data,DataSize,ParseOffset,&ParseOffset);
             //    MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             //}
+            size_t PreviousLambdaCount = OutLambdas.size();
             MemberExpression RuleExpression = p_ParseMemberExpression(Data,DataSize,ParseOffset,&ParseOffset,CurrentLambdaID,OutLambdas,OutInfo);    
-            if(OutLambdas.size() >  0)
-            {
-                throw MBCCParseError("Syntactic error parsing MBCC definitions: lambda only allowed as the right hand side in an assignment",ParseOffset);
-            }
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             if(ParseOffset >= DataSize)
             {
@@ -659,6 +660,10 @@ struct Hej1 : Hej2
                 //member assignment    
                 ParseOffset += 1;
                 NewComponent.AssignedMember = std::move(RuleExpression);
+                if(PreviousLambdaCount < OutLambdas.size())
+                {
+                    throw MBCCParseError("Syntactic error parsing MBCC definitions: lambda only allowed as the right hand side in an assignment",ParseOffset);
+                }
                 RuleExpression = p_ParseMemberExpression(Data,DataSize,ParseOffset,&ParseOffset,CurrentLambdaID,OutLambdas,OutInfo);
                 MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             }
