@@ -35,20 +35,24 @@ namespace MBCC
                 }
                 else if(Member.IsType<StructMemberVariable_Struct>())
                 {
-                    VariableType = Member.GetType<StructMemberVariable_Struct>().Name;
+                    VariableType = Member.GetType<StructMemberVariable_Struct>().StructType;
                 }
                 else if(Member.IsType<StructMemberVariable_Raw>())
                 {
-                    VariableType = Member.GetType<StructMemberVariable_Raw>().Name;
+                    VariableType = Member.GetType<StructMemberVariable_Raw>().RawMemberType;
                 }
                 else if(Member.IsType<StructMemberVariable_tokenPosition>())
                 {
-                    VariableType = "TokenPosition";
+                    VariableType = "MBCC.TokenPosition";
                 }
                 OutStream << VariableType<<" "<<Member.GetName();
                 if(Member.GetDefaultValue().Value != "")
                 {
                     OutStream<<" = "<<Member.GetDefaultValue().Value;
+                }
+                else if(VariableType == "string")
+                {
+                    OutStream << " = \"\"";   
                 }
                 else
                 {

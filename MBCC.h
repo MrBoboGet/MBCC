@@ -311,7 +311,7 @@ namespace MBCC
         struct Empty{};
         std::variant<Empty,MemberReference,Literal> m_Data;
     public:
-        TypeInfo ResultType;
+        TypeInfo ResultType = -1;
 
         bool IsEmpty() const
         {
@@ -342,6 +342,7 @@ namespace MBCC
     struct RuleComponent
     {
         bool IsTerminal = false;
+        bool IsInline = false;
         int Min = 1;
         //-1 means that Max is unbounded
         int Max = 1;
@@ -371,6 +372,7 @@ namespace MBCC
     struct NonTerminal
     {
         std::string Name;    
+        bool IsInline = false;
         StructIndex AssociatedStruct = -1;
         std::vector<ParseRule> Rules;
     };
@@ -528,7 +530,7 @@ namespace MBCC
         static std::pair<Identifier,Identifier> p_ParseDef(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
         static StructMemberVariable p_ParseMemberVariable(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
         static StructDefinition p_ParseStruct(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
-        static MemberExpression p_ParseMemberExpression(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo);
+        static MemberExpression p_ParseMemberExpression(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,bool IsLHS,int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo);
         static std::vector<ParseRule> p_ParseParseRules(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,char EndMarker,int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo);
         
 

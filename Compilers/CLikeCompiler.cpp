@@ -164,8 +164,11 @@ namespace MBCC
             MBUtility::MBOctetOutputStream& OutStream, 
             std::vector<std::pair<std::string,std::string>>& DelayedAssignments)
     {
+
+
+
         DelayedInfo DelayedMember;
-        std::string Body = p_GetBody(Grammar,AssociatedNonTerminal,Production,ComponentToWrite,DelayedMember);
+        std::string Body = p_GetBody(Grammar,AssociatedNonTerminal,Production,ComponentToWrite,DelayedMember,DelayedAssignments);
         std::string CondType = p_GetCondType(Grammar,ComponentToWrite);
         std::string CondExpression = p_GetCondExpression(Grammar,ComponentToWrite);
 
@@ -191,8 +194,46 @@ namespace MBCC
             assert(false && "Unrecognzied cond type in p_WriteRuleComponent");   
         }
     }
-    std::string CLikeParser::p_GetBody(MBCCDefinitions const& Grammar,NonTerminal const& AssociatedNonTerminal,ParseRule const& Production ,RuleComponent const& ComponentToWrite,DelayedInfo& Delayed)
+
+    //inline std::string& operator<<(std::string& lhs,std::string const& rhs)
+    //{
+    //    lhs+=rhs;
+    //    return lhs;
+    //}
+    //inline std::string& operator<<(std::string& lhs,const char* rhs)
+    //{
+    //    lhs += rhs;
+    //    return lhs;
+    //}
+    std::string CLikeParser::p_GetBody(MBCCDefinitions const& Grammar,NonTerminal const& AssociatedNonTerminal,ParseRule const& Production ,RuleComponent const& ComponentToWrite,DelayedInfo& Delayed,  std::vector<std::pair<std::string,std::string>>& DelayedAssignments)
     {
+        if(ComponentToWrite.IsInline)
+        {
+            std::string ResultString;
+            MBUtility::MBStringOutputStream OutStream(ResultString);
+            assert(ComponentToWrite.ReferencedRule.IsType<MemberReference>() && !ComponentToWrite.IsTerminal && 
+                    "Inline rule has to refer to a non-terminal");
+            auto NonTermIt = Grammar.NameToNonTerminal.find(ComponentToWrite.ReferencedRule.GetType<MemberReference>().Names[0]);
+            assert(NonTermIt != Grammar.NameToNonTerminal.end() && "Inline rule has to refer to an existing non-terminal");
+            NonTerminal const& InlineRules = Grammar.NonTerminals[NonTermIt->second];
+            for(int i = 0; i < InlineRules.Rules.size();i++)
+            {
+                if(i != 0)
+                {
+                    OutStream << "else ";
+                }
+                OutStream<<"if ";
+                std::string const& LookPredicate = p_GetLOOKPredicate(ComponentToWrite.ComponentIndex,i);
+                assert(LookPredicate.size() != 0);
+                OutStream<<"("<<LookPredicate<<")\n{\n";
+                p_WriteProductionStatements(Grammar,ComponentToWrite.ComponentIndex,i,DelayedAssignments,OutStream);
+                OutStream<<"\n}\n";
+            }
+            OutStream<<"else\n{\n"<<
+                m_Adapter->GetThrowExpectedException(AssociatedNonTerminal.Name,AssociatedNonTerminal.Name)<<
+                "\n}\n";
+            return ResultString;
+        }
         std::string ReturnValue;
         //only check if not in an optional or * 
         if(ComponentToWrite.Max == 1 && ComponentToWrite.Min == 1 || (ComponentToWrite.Min == 1 && ComponentToWrite.Max == -1))
@@ -206,7 +247,7 @@ namespace MBCC
             else if(!ComponentToWrite.ReferencedRule.IsType<Literal>())
             {
                 ReturnValue = "if(!(" + p_GetLOOKPredicate(ComponentToWrite.ComponentIndex) + "))\n{\n"+
-                    m_Adapter->GetThrowExpectedException(AssociatedNonTerminal.Name,Grammar.Terminals[ComponentToWrite.ComponentIndex].Name)+
+                    m_Adapter->GetThrowExpectedException(AssociatedNonTerminal.Name,Grammar.NonTerminals[ComponentToWrite.ComponentIndex].Name)+
                     "\n}\n";
             }
         }
@@ -297,6 +338,31 @@ namespace MBCC
             MBUtility::WriteData(SourceOut,"}\n");
         }
     }
+    void CLikeParser::p_WriteProductionStatements(MBCCDefinitions const& Grammar,NonTerminalIndex NonTermIndex,int ProductionIndex,
+            std::vector<std::pair<std::string,std::string>>& DelayedAssignments,
+            MBUtility::MBOctetOutputStream& SourceOut)
+    {
+        int RegularComponentCount = 0;
+        int MetaComponentCount = 0;
+        NonTerminal const& AssociatedNonTerminal = Grammar.NonTerminals[NonTermIndex];
+        ParseRule const& Production = AssociatedNonTerminal.Rules[ProductionIndex];
+        for(int i = 0; i < Production.MetaComponents.size() + Production.Components.size();i++)
+        {
+            RuleComponent const* ComponentPointer = nullptr;
+            if(MetaComponentCount < Production.MetaComponents.size() && i == Production.MetaComponents[MetaComponentCount].first)
+            {
+                ComponentPointer = &Production.MetaComponents[MetaComponentCount].second;
+                MetaComponentCount++;
+            }
+            else
+            {
+                ComponentPointer = &Production.Components[RegularComponentCount];
+                RegularComponentCount++;   
+            }
+            auto const& Component = *ComponentPointer;
+            p_WriteRuleComponent(Grammar,AssociatedNonTerminal,Production,Component,SourceOut,DelayedAssignments);
+        }
+    }
     void CLikeParser::p_WriteNonTerminalProduction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTermIndex,int ProductionIndex,std::string const& FunctionName,MBUtility::MBOctetOutputStream& SourceOut)
     {
         std::string ReturnValueType = "void";
@@ -326,24 +392,7 @@ namespace MBCC
         }
         //first = member, second = name
         std::vector<std::pair<std::string,std::string>> DelayedAssignments;
-        int RegularComponentCount = 0;
-        int MetaComponentCount = 0;
-        for(int i = 0; i < Production.MetaComponents.size() + Production.Components.size();i++)
-        {
-            RuleComponent const* ComponentPointer = nullptr;
-            if(MetaComponentCount < Production.MetaComponents.size() && i == Production.MetaComponents[MetaComponentCount].first)
-            {
-                ComponentPointer = &Production.MetaComponents[MetaComponentCount].second;
-                MetaComponentCount++;
-            }
-            else
-            {
-                ComponentPointer = &Production.Components[RegularComponentCount];
-                RegularComponentCount++;   
-            }
-            auto const& Component = *ComponentPointer;
-            p_WriteRuleComponent(Grammar,AssociatedNonTerminal,Production,Component,SourceOut,DelayedAssignments);
-        }
+        p_WriteProductionStatements(Grammar,NonTermIndex,ProductionIndex,DelayedAssignments,SourceOut);
         for(auto const& Assignment : DelayedAssignments)
         {
             SourceOut<<"ReturnValue"<<Assignment.first<<" = std::move("<<Assignment.second<<");\n";
@@ -352,7 +401,11 @@ namespace MBCC
         {
             SourceOut<<Action.ActionString<<"\n";
         }
-        MBUtility::WriteData(SourceOut,"return(ReturnValue);\n}\n");
+        if(ReturnValueType != "void")
+        {
+            MBUtility::WriteData(SourceOut,"return(ReturnValue);");
+        }
+        SourceOut<<"\n}\n";
     }
     void CLikeParser::WriteNonTerminalFunctions(MBCCDefinitions  const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,MBUtility::MBOctetOutputStream& SourceOut)
     {
@@ -361,6 +414,10 @@ namespace MBCC
         //Order we write C/C++/C# implementations dont matter, we can just write them directly
         for(NonTerminalIndex i = 0; i < Grammar.NonTerminals.size();i++)
         {
+            if(Grammar.NonTerminals[i].IsInline)
+            {
+                continue;   
+            }
             p_WriteNonTerminalFunction(Grammar,i,SourceOut);     
             for(int j = 0; j < Grammar.NonTerminals[i].Rules.size();j++)
             {

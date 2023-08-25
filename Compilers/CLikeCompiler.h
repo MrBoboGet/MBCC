@@ -49,7 +49,12 @@ private:
         std::string p_GetCondType(MBCCDefinitions const& Grammar,RuleComponent const& ComponentToInspect);
         std::string p_GetCondExpression(MBCCDefinitions const& Grammar,RuleComponent const& ComponentToInspect);
 
-        std::string p_GetBody(MBCCDefinitions const& Grammar,NonTerminal const& AssociatedNonTerminal,ParseRule const& Production ,RuleComponent const& ComponentToInspect,DelayedInfo& Delayed);
+        std::string p_GetBody(MBCCDefinitions const& Grammar,
+                NonTerminal const& AssociatedNonTerminal,
+                ParseRule const& Production ,
+                RuleComponent const& ComponentToInspect,
+                DelayedInfo& Delayed,
+                std::vector<std::pair<std::string,std::string>>& DelayedAssignments);
 
 
         void p_WriteRuleComponent(MBCCDefinitions const& Grammar,
@@ -61,6 +66,9 @@ private:
 
 
 
+        void p_WriteProductionStatements(MBCCDefinitions const& Grammar,NonTerminalIndex NonTermIndex,int ProductionIndex,
+            std::vector<std::pair<std::string,std::string>>& DelayedAssignments,
+            MBUtility::MBOctetOutputStream& SourceOut);
         void p_WriteNonTerminalFunction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTerminal, MBUtility::MBOctetOutputStream& SourceOut);
         void p_WriteNonTerminalProduction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTerminal,int ProductionIndex,std::string const& FunctionName,MBUtility::MBOctetOutputStream& SourceOut);
 

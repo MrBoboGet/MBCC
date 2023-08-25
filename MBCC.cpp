@@ -518,7 +518,7 @@ struct Hej1 : Hej2
         }
         return ReturnValue;
     }
-    MemberExpression MBCCDefinitions::p_ParseMemberExpression(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset, int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo)
+    MemberExpression MBCCDefinitions::p_ParseMemberExpression(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,bool IsLHS, int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo)
     {
         MemberExpression ReturnValue;
         size_t ParseOffset = InParseOffset;
@@ -566,6 +566,10 @@ struct Hej1 : Hej2
 
             if(ParseOffset < DataSize && Data[ParseOffset] == '(')
             {
+                if(IsLHS)
+                {
+                    break;   
+                }
                 //in potential lambda declaration
                 if(MemberExpr.Names.size() != 1)
                 {
@@ -637,6 +641,50 @@ struct Hej1 : Hej2
                 MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
                 continue;
             }
+            else if(Data[ParseOffset] == '(')
+            {
+                ParseOffset += 1;
+                std::vector<ParseRule> Rules = p_ParseParseRules(Data,DataSize,ParseOffset,&ParseOffset,')',CurrentLambdaID,OutLambdas,OutInfo);
+                Lambda NewLambda;
+                NewLambda.Name = p_LambdaIDToLambdaName(CurrentLambdaID);
+                CurrentLambdaID++;
+                NewLambda.Rules = std::move(Rules);
+
+
+                RuleComponent NewComponent;
+                MemberReference& ReferencedRule = NewComponent.ReferencedRule.SetType<MemberReference>();
+
+                ReferencedRule.PartTypes.push_back(-1);
+                ReferencedRule.Names.push_back(NewLambda.Name);
+                ReferencedRule.PartByteOffsets.push_back(-1);
+                NewComponent.IsInline = true;
+                if(ParseOffset < DataSize)
+                {
+                    if(Data[ParseOffset] == '+')
+                    {
+                        NewComponent.Min = 1;    
+                        NewComponent.Max = -1;    
+                        ParseOffset++;
+                    }
+                    else if(Data[ParseOffset] == '?')
+                    {
+                        NewComponent.Min = 0;
+                        NewComponent.Max = 1;
+                        ParseOffset++;
+                    }
+                    else if(Data[ParseOffset] == '*')
+                    {
+                        NewComponent.Min = 0;
+                        NewComponent.Max = -1;
+                        ParseOffset++;
+                    }
+                }
+
+                CurrentRule.Components.push_back(std::move(NewComponent));
+                OutLambdas.push_back(std::move(NewLambda));
+                MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
+                continue;
+            }
             else if(Data[ParseOffset] == EndMarker)
             {
                 ParseOffset+=1;
@@ -649,7 +697,7 @@ struct Hej1 : Hej2
             //    MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             //}
             size_t PreviousLambdaCount = OutLambdas.size();
-            MemberExpression RuleExpression = p_ParseMemberExpression(Data,DataSize,ParseOffset,&ParseOffset,CurrentLambdaID,OutLambdas,OutInfo);    
+            MemberExpression RuleExpression = p_ParseMemberExpression(Data,DataSize,ParseOffset,&ParseOffset,true,CurrentLambdaID,OutLambdas,OutInfo);    
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             if(ParseOffset >= DataSize)
             {
@@ -664,7 +712,7 @@ struct Hej1 : Hej2
                 {
                     throw MBCCParseError("Syntactic error parsing MBCC definitions: lambda only allowed as the right hand side in an assignment",ParseOffset);
                 }
-                RuleExpression = p_ParseMemberExpression(Data,DataSize,ParseOffset,&ParseOffset,CurrentLambdaID,OutLambdas,OutInfo);
+                RuleExpression = p_ParseMemberExpression(Data,DataSize,ParseOffset,&ParseOffset,false,CurrentLambdaID,OutLambdas,OutInfo);
                 MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             }
             else
@@ -1354,6 +1402,7 @@ struct Hej1 : Hej2
         size_t ParseOffset = InOffset; 
         MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
         std::vector<std::pair<Identifier,Identifier>> UnresolvedDefs;
+        std::unordered_map<std::string,std::vector<std::string>> UnresolvedLambdaLinks;
         int CurrentLamdaID = 1;
         while(ParseOffset < DataSize)
         {
@@ -1485,7 +1534,15 @@ struct Hej1 : Hej2
                     }
                     Identifier TermName;
                     TermName.Value = NewNonTerminal.Name;
-                    UnresolvedDefs.push_back({TermName,NewLambda.Type});
+                    if(NewLambda.Type.Value != "")
+                    {
+                        UnresolvedDefs.push_back({TermName,NewLambda.Type});
+                    }
+                    else
+                    {
+                        UnresolvedLambdaLinks[CurrentIdentifier.Value].push_back(NewLambda.Name);
+                        NewNonTerminal.IsInline = true;
+                    }
                     ReturnValue.NonTerminals.push_back(std::move(NewNonTerminal));
                 }
             }
@@ -1503,6 +1560,15 @@ struct Hej1 : Hej2
             }
             else
             {
+                auto LinkIt = UnresolvedLambdaLinks.find(Def.first.Value);
+                auto StructValue = ReturnValue.NameToStruct[Def.second.Value];
+                if(LinkIt != UnresolvedLambdaLinks.end())
+                {
+                    for(auto& LambdaName : LinkIt->second)
+                    {
+                        ReturnValue.NonTerminals[ReturnValue.NameToNonTerminal[LambdaName]].AssociatedStruct = StructValue;
+                    }
+                }
                 ReturnValue.NonTerminals[ReturnValue.NameToNonTerminal[Def.first.Value]].AssociatedStruct = ReturnValue.NameToStruct[Def.second.Value];
             }
         }
