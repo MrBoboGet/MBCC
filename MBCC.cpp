@@ -559,7 +559,6 @@ struct Hej1 : Hej2
             }
 
             std::string NewPart = PartIdentifier.Value;
-            MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             MemberExpr.Names.push_back(std::move(NewPart));
             MemberExpr.PartTypes.push_back(-1);
             MemberExpr.PartByteOffsets.push_back(PartIdentifier.ByteOffset);
@@ -591,10 +590,15 @@ struct Hej1 : Hej2
                 OutLambdas.push_back(NewLambda);
                 MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             }
+            MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
 
             if(ParseOffset < DataSize && Data[ParseOffset] == '.')
             {
                 ParseOffset+=1; 
+            }
+            else if(ParseOffset < DataSize && Data[ParseOffset] == '(')
+            {
+                break;   
             }
             else
             {
@@ -1570,6 +1574,25 @@ struct Hej1 : Hej2
                     }
                 }
                 ReturnValue.NonTerminals[ReturnValue.NameToNonTerminal[Def.first.Value]].AssociatedStruct = ReturnValue.NameToStruct[Def.second.Value];
+            }
+        }
+        for(auto& NonTerm : ReturnValue.NonTerminals)
+        {
+            if(NonTerm.AssociatedStruct == -1)
+            {
+                auto StructIt = ReturnValue.NameToStruct.find(NonTerm.Name);
+                if(StructIt != ReturnValue.NameToStruct.end())
+                {
+                    auto LinkIt = UnresolvedLambdaLinks.find(NonTerm.Name);
+                    if(LinkIt != UnresolvedLambdaLinks.end())
+                    {
+                        for(auto& LambdaName : LinkIt->second)
+                        {
+                            ReturnValue.NonTerminals[ReturnValue.NameToNonTerminal[LambdaName]].AssociatedStruct = StructIt->second;
+                        }
+                    }
+                    NonTerm.AssociatedStruct = StructIt->second;
+                }
             }
         }
         if(ReturnValue.SkipRegex == "")
