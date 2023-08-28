@@ -187,7 +187,7 @@ namespace MBCC
         }
         else if(CondType == "do")
         {
-            OutStream <<  CondType << "\n{\n"<<Body<<"\n}\n"<<"while("<<CondExpression<<")\n";
+            OutStream <<  CondType << "\n{\n"<<Body<<"\n}\n"<<"while("<<CondExpression<<");\n";
         }
         else
         {
@@ -235,8 +235,10 @@ namespace MBCC
             return ResultString;
         }
         std::string ReturnValue;
+        bool IsSpecial = (ComponentToWrite.ReferencedRule.IsType<MemberReference>() && ComponentToWrite.ReferencedRule.GetType<MemberReference>().Names[0] == "TOKEN");
         //only check if not in an optional or * 
-        if(ComponentToWrite.Max == 1 && ComponentToWrite.Min == 1 || (ComponentToWrite.Min == 1 && ComponentToWrite.Max == -1))
+        if( (ComponentToWrite.Max == 1 && ComponentToWrite.Min == 1 || (ComponentToWrite.Min == 1 && ComponentToWrite.Max == -1))
+            && !IsSpecial)
         {
             if(ComponentToWrite.IsTerminal)
             {
@@ -269,7 +271,7 @@ namespace MBCC
         { 
             ReturnValue += RhsString+";\n";
         }
-        if(ComponentToWrite.IsTerminal)
+        if(ComponentToWrite.IsTerminal && !IsSpecial)
         {
             ReturnValue += "Tokenizer.ConsumeToken();\n";
         }
