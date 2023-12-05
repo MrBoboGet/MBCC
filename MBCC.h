@@ -73,7 +73,7 @@ namespace MBCC
         public:
         //template<typename T> void Accept(T& Visitor);
         //template<typename T> void Accept(T& Visitor) const;
-        template<typename T> PolyBase(T ObjectToStore)
+        template<typename T,typename = std::enable_if_t<std::is_base_of<C,T>::value>> PolyBase(T ObjectToStore)
         {
             static_assert(std::is_base_of<C,T>::value);
             m_Data = std::unique_ptr<C>(new T(std::move(ObjectToStore)));

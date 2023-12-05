@@ -44,7 +44,8 @@ namespace MBCC
     StructMemberVariable::StructMemberVariable(StructMemberVariable_List ListMemberVariable)
         : m_Content(std::move(ListMemberVariable))
     {
-           
+        int ReturnValue = 0;
+
     }
     StructMemberVariable::StructMemberVariable(StructMemberVariable_Raw RawMemberVariable)
         : m_Content(std::move(RawMemberVariable))
@@ -1666,7 +1667,11 @@ struct Hej1 : Hej2
                     //{
                     //    continue;
                     //}
-                    if(Component.IsTerminal)
+                    if(Component.ReferencedRule.IsType<Literal>())
+                    {
+                        m_Nodes[RuleOffset].Edges.push_back(GLAEdge(-1,RuleOffset+1));
+                    }
+                    else if(Component.IsTerminal)
                     {
                         m_Nodes[RuleOffset].Edges.push_back(GLAEdge(Component.ComponentIndex,RuleOffset+1));
                         if (Component.Max == -1 || Component.Min == 0)
