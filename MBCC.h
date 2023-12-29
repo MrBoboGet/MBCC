@@ -96,7 +96,7 @@ namespace MBCC
         }
         PolyBase() = default;
         PolyBase(PolyBase&&) = default;
-        template<typename T> bool IsType() const
+        template<typename T,typename = std::enable_if_t<std::is_base_of<C,T>::value>> bool IsType() const
         {
             static_assert(std::is_base_of_v<C,T>, "Can only check type for possible derived value");
             auto IDToCompare = GetTypeBegin<T>();
@@ -111,7 +111,7 @@ namespace MBCC
             std::swap(m_TypeID,StructToMove.m_TypeID);
             std::swap(m_Data,StructToMove.m_Data);
         }
-        template<typename T> T const& GetType() const
+        template<typename T,typename = std::enable_if_t<std::is_base_of<C,T>::value>> T const& GetType() const
         {
             if(!IsType<T>() || m_Data == nullptr)
             {
@@ -119,7 +119,7 @@ namespace MBCC
             }
             return static_cast<T const&>(*m_Data);
         }
-        template<typename T> T& GetType()
+        template<typename T,typename = std::enable_if_t<std::is_base_of<C,T>::value>> T& GetType()
         {
             if(!IsType<T>() || m_Data == nullptr)
             {
@@ -679,6 +679,7 @@ namespace MBCC
         }
     };
 
+    typedef std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> LookType;
 
 
 

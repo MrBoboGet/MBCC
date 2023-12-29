@@ -1,25 +1,27 @@
+#pragma once
 #include "../MBCC.h"
 
 
 #include <MBUtility/StaticVariant.h>
+#include <type_traits>
 namespace MBCC
 {
-    struct Type
-    {
-        //either Name != "" or Info != -1
-        std::string Name;
-        TypeInfo Info = -1;
+    //struct Type
+    //{
+    //    //either Name != "" or Info != -1
+    //    std::string Name;
+    //    TypeInfo Info = -1;
 
-        Type(std::string name)
-        {
-            Name = name;   
-        }
-        Type(TypeInfo info)
-        {
-            Info = info;   
-        }
-        Type(){};
-    };
+    //    Type(std::string name)
+    //    {
+    //        Name = name;   
+    //    }
+    //    Type(TypeInfo info)
+    //    {
+    //        Info = info;   
+    //    }
+    //    Type(){};
+    //};
     
     class Expression;
     struct Expr_LOOKValue
@@ -29,6 +31,7 @@ namespace MBCC
     struct Expr_GetVar
     {
         std::vector<std::string> Fields;
+        std::vector<TypeInfo> FieldTypes;
     };
     struct Expr_Integer
     {
@@ -47,6 +50,7 @@ namespace MBCC
         NonTerminalIndex NonTerminal = -1;
         int ProductionIndex = -1;
         std::vector<std::string> SubFields;
+        std::vector<TypeInfo> FieldTypes;
     };
     struct Expr_Convert
     {
@@ -81,7 +85,7 @@ namespace MBCC
     };
     struct Expr_DefaultConstruct
     {
-        Type ObjectType;
+        TypeInfo ObjectType;
     };
     struct Expr_GetBack
     {
@@ -113,7 +117,7 @@ namespace MBCC
     struct Statement_IfChain
     {
         //implicit else at the end
-        std::vector<Statement_If> Alternatives;
+        std::vector<Statement> Alternatives;
     };
     struct Statement_While
     {
@@ -141,11 +145,11 @@ namespace MBCC
     };
     struct Statement_DeclareVar
     {
-        Type VarType;
+        TypeInfo VarType;
         std::string Name;
 
         Statement_DeclareVar(){}
-        Statement_DeclareVar(Type type,std::string name)
+        Statement_DeclareVar(TypeInfo type,std::string name)
         {
             VarType = type;
             Name = name;   
@@ -180,10 +184,14 @@ namespace MBCC
     class Statement : public MBUtility::StaticVariant<Statement_If,Statement_IfChain,Statement_While,Statement_DoWhile,Statement_AssignVar,Statement_AddList,Statement_Return,Statement_DeclareVar,Statement_Expr,Statement_Exception,Statement_PopToken,Statement_FillVar>
     {
     public:
+        Statement(Statement const&) = delete;
+        Statement& operator=(Statement const&) = delete;
+        Statement& operator=(Statement&&) noexcept = default;
+        Statement(Statement &&) noexcept = default;
         template<typename T,typename = InVariant<T>>
         Statement& operator=(T&& Data)
         {
-            ((Base&)*this) = Data;
+            ((Base&)*this) = std::forward<T>(Data);
             return *this;
         }
         Statement() { }
@@ -198,20 +206,260 @@ namespace MBCC
         NonTerminalIndex NonTerminal = -1;
         int ProductionIndex = -1;
         //-1 == void
-        Type ReturnType;
+        TypeInfo ReturnType = -1;
+        bool Direct = false;
         std::vector<Statement> Content;
     };
+    struct DelayedAssignment
+    {
+        Statement_DeclareVar Variable;
+        Statement_AssignVar Assignment;
+    };
     void ConvertRuleBody( MBCCDefinitions const& Grammar,
-            NonTerminal const& AssociatedNonTerminal,
+            LookType  const& TotalProductions,
+            NonTerminalIndex NonTermIndex,
             ParseRule const& Production,
             std::vector<Statement>& OutStatements,
-            std::vector<Statement>& DelayedAssignments);
-   
+            std::unordered_map<std::string,DelayedAssignment>& DelayedAssignments);
     Expression GetLookPredicate(MBCCDefinitions const& Grammar,LookType const& TotalProductions,NonTerminalIndex NonTerminal,int Production);
-    std::vector<Statement> GetProductionContent(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& TotalProductions, NonTerminalIndex TerminalIndex,int ProductionIndex);
+    std::vector<Statement> GetProductionContent(MBCCDefinitions const& Grammar,LookType const& TotalProductions, NonTerminalIndex TerminalIndex,int ProductionIndex);
     Function ConvertDirectionFunction(MBCCDefinitions const& Grammar,LookType const& TotalProductions,
             NonTerminalIndex TerminalIndex,int ProductionIndex);
     Function ConvertFillFunction(MBCCDefinitions const& Grammar,LookType const& TotalProductions,
             NonTerminalIndex TerminalIndex,int ProductionIndex);
     std::vector<Function> ConvertToIR(MBCCDefinitions const& Grammar,LookType const& TotalProductions);
+
+
+    template<typename T,typename... Args>
+    constexpr bool Callable_v = std::is_invocable_v<T,Args...>;
+
+    template<typename T,typename... Args>
+    constexpr bool BoolResult_v = std::is_same_v<bool,decltype(std::declval<T>()(std::declval<Args>()...))>;
+
+    template<typename T,typename... Args>
+    bool VisitAndPoll(T& Visitor,Args const&... Arguments)
+    {
+        bool ReturnValue = true;
+        if constexpr(Callable_v<T,Args...>)
+        {
+            if constexpr(BoolResult_v<T,Args...>)
+            {
+                if(!Visitor(Arguments...))
+                {
+                    return false;
+                }    
+            }
+            else
+            {
+                Visitor(Arguments...);
+            }
+        }
+        return ReturnValue;
+    }
+    //MBUtility::StaticVariant< Expr_LOOKValue,Expr_GetVar,Expr_Integer,Expr_Bool,Expr_String,Expr_ParseDirect,Expr_Convert,Expr_And,Expr_Equality,Expr_PeekValue,Expr_PeekType,Expr_PeekPosition,Expr_DefaultConstruct,Expr_GetBack>
+    template<typename T,typename S, typename = std::enable_if_t<std::conjunction_v<std::negation<std::is_same<S,Expression>>,
+        std::is_constructible<Expression,S>>>>
+    void Traverse(T& Visitor,S const& ExpressionToTraverse)
+    {
+        if constexpr(std::is_same_v<S,Expr_LOOKValue>)
+        {
+            auto const& Look = static_cast<Expr_LOOKValue const&>(ExpressionToTraverse);
+            if(!VisitAndPoll(Visitor,Look)) return;
+        }
+        else if constexpr(std::is_same_v<S,Expr_GetVar>)
+        {
+            auto const& Look = static_cast<Expr_GetVar const&>(ExpressionToTraverse);
+            if(!VisitAndPoll(Visitor,Look)) return;
+        }
+        else if constexpr(std::is_same_v<S,Expr_Integer>)
+        {
+            auto const& Look = static_cast<Expr_Integer const&>(ExpressionToTraverse);
+            if(!VisitAndPoll(Visitor,Look)) return;
+        }
+        else if constexpr(std::is_same_v<S,Expr_Bool>)
+        {
+            auto const& Look = static_cast<Expr_Bool const&>(ExpressionToTraverse);
+            if(!VisitAndPoll(Visitor,Look)) return;
+        }
+        else if constexpr(std::is_same_v<S,Expr_String>)
+        {
+            auto const& Look = static_cast<Expr_String const&>(ExpressionToTraverse);
+            if(!VisitAndPoll(Visitor,Look)) return;
+        }
+        else if constexpr(std::is_same_v<S,Expr_ParseDirect>)
+        {
+            auto const& Look = static_cast<Expr_ParseDirect const&>(ExpressionToTraverse);
+            if(!VisitAndPoll(Visitor,Look)) return;
+        }
+        else if constexpr(std::is_same_v<S,Expr_Convert>)
+        {
+            auto const& Convert = static_cast<Expr_Convert const&>(ExpressionToTraverse);
+            if(!VisitAndPoll(Visitor,Convert)) return;
+            Traverse(Visitor,*Convert.ValueToConvert);
+        }
+        else if constexpr(std::is_same_v<S,Expr_And>)
+        {
+            auto const& Convert = static_cast<Expr_And const&>(ExpressionToTraverse);
+            if(!VisitAndPoll(Visitor,Convert)) return;
+            for(auto const& Args : Convert.Arguments)
+            {
+                Traverse(Visitor,Args);
+            }
+        }
+        else if constexpr(std::is_same_v<S,Expr_Equality>)
+        {
+            auto const& Equality = static_cast<Expr_Equality const&>(ExpressionToTraverse);
+            if(!VisitAndPoll(Visitor,Equality)) return;
+            Traverse(Visitor,*Equality.Lhs);
+            Traverse(Visitor,*Equality.Rhs);
+        }
+        else if constexpr(std::is_same_v<S,Expr_PeekValue>)
+        {
+            auto const& Equality = static_cast<Expr_PeekValue const&>(ExpressionToTraverse);
+            if(!VisitAndPoll(Visitor,Equality)) return;
+        }
+        else if constexpr(std::is_same_v<S,Expr_PeekType>)
+        {
+            auto const& Equality = static_cast<Expr_PeekType const&>(ExpressionToTraverse);
+            if(!VisitAndPoll(Visitor,Equality)) return;
+        }
+        else if constexpr(std::is_same_v<S,Expr_PeekPosition>)
+        {
+            auto const& Equality = static_cast<Expr_PeekPosition const&>(ExpressionToTraverse);
+            if(!VisitAndPoll(Visitor,Equality)) return;
+        }
+        else if constexpr(std::is_same_v<S,Expr_DefaultConstruct>)
+        {
+            auto const& Equality = static_cast<Expr_DefaultConstruct const&>(ExpressionToTraverse);
+            if(!VisitAndPoll(Visitor,Equality)) return;
+        }
+        else if constexpr(std::is_same_v<S,Expr_GetBack>)
+        {
+            auto const& Equality = static_cast<Expr_GetBack const&>(ExpressionToTraverse);
+            if(!VisitAndPoll(Visitor,Equality)) return;
+            Traverse(Visitor,Equality.ListVariable);
+        }
+    }
+    template<typename T>
+    void Traverse(T& Visitor,Expression const& ExpressionToTraverse)
+    {
+        if(!VisitAndPoll(Visitor,ExpressionToTraverse))
+        {
+            return;   
+        }
+        auto VisitorAdapter = [&](auto const& Val){Traverse(Visitor,Val);};
+        ExpressionToTraverse.Visit(VisitorAdapter);
+    }
+
+    //MBUtility::StaticVariant<Statement_If,Statement_IfChain,Statement_While,Statement_DoWhile,Statement_AssignVar,Statement_AddList,Statement_Return,Statement_DeclareVar,Statement_Expr,Statement_Exception,Statement_PopToken,Statement_FillVar>
+    template<typename T>
+    void Traverse(T& Visitor,Statement const& StatementToTraverse)
+    {
+        if(!VisitAndPoll(Visitor,StatementToTraverse))
+        {
+            return;   
+        }
+        if(StatementToTraverse.IsType<Statement_If>())
+        {
+            auto const& If = StatementToTraverse.GetType<Statement_If>();
+            if(!VisitAndPoll(Visitor,If)) return;
+            Traverse(Visitor,If.Condition);
+            for(auto const& Statement : If.Content)
+            {
+                Traverse(Visitor,Statement);
+            }
+        }
+        else if(StatementToTraverse.IsType<Statement_IfChain>())
+        {
+            auto const& If = StatementToTraverse.GetType<Statement_IfChain>();
+            if(!VisitAndPoll(Visitor,If)) return;
+            for(auto const& Statement : If.Alternatives)
+            {
+                Traverse(Visitor,Statement);
+            }
+        }
+        else if(StatementToTraverse.IsType<Statement_While>())
+        {
+            auto const& While = StatementToTraverse.GetType<Statement_While>();
+            if(!VisitAndPoll(Visitor,While)) return;
+            Traverse(Visitor,While.Condition);
+            for(auto const& Statement : While.Content)
+            {
+                Traverse(Visitor,Statement);
+            }
+        }
+        else if(StatementToTraverse.IsType<Statement_DoWhile>())
+        {
+            auto const& While = StatementToTraverse.GetType<Statement_DoWhile>();
+            if(!VisitAndPoll(Visitor,While)) return;
+            Traverse(Visitor,While.Condition);
+            for(auto const& Statement : While.Content)
+            {
+                Traverse(Visitor,Statement);
+            }
+        }
+        else if(StatementToTraverse.IsType<Statement_AssignVar>())
+        {
+            auto const& Assignment = StatementToTraverse.GetType<Statement_AssignVar>();
+            if(!VisitAndPoll(Visitor,Assignment)) return;
+            Traverse(Visitor,Assignment.Variable);
+            Traverse(Visitor,Assignment.Value);
+        }
+        else if(StatementToTraverse.IsType<Statement_AddList>())
+        {
+            auto const& Add = StatementToTraverse.GetType<Statement_AddList>();
+            if(!VisitAndPoll(Visitor,Add)) return;
+            Traverse(Visitor,Add.Variable);
+            Traverse(Visitor,Add.Value);
+        }
+        else if(StatementToTraverse.IsType<Statement_Return>())
+        {
+            auto const& Return = StatementToTraverse.GetType<Statement_Return>();
+            if(!VisitAndPoll(Visitor,Return)) return;
+        }
+        else if(StatementToTraverse.IsType<Statement_DeclareVar>())
+        {
+            auto const& Declaration = StatementToTraverse.GetType<Statement_DeclareVar>();
+            if(!VisitAndPoll(Visitor,Declaration)) return;
+        }
+        else if(StatementToTraverse.IsType<Statement_Expr>())
+        {
+            auto const& Expression = StatementToTraverse.GetType<Statement_Expr>();
+            if(!VisitAndPoll(Visitor,Expression)) return;
+            Traverse(Visitor,Expression.Expr);
+        }
+        else if(StatementToTraverse.IsType<Statement_Exception>())
+        {
+            auto const& Exception = StatementToTraverse.GetType<Statement_Exception>();
+            if(!VisitAndPoll(Visitor,Exception)) return;
+        }
+        else if(StatementToTraverse.IsType<Statement_PopToken>())
+        {
+            auto const& Pop = StatementToTraverse.GetType<Statement_PopToken>();
+            if(!VisitAndPoll(Visitor,Pop)) return;
+        }
+        else if(StatementToTraverse.IsType<Statement_FillVar>())
+        {
+            auto const& Fill = StatementToTraverse.GetType<Statement_FillVar>();
+            if(!VisitAndPoll(Visitor,Fill)) return;
+            Traverse(Visitor,Fill.ValueToFill);
+        }
+        else
+        {
+            assert(false && "Statement traverse doesn't cover all cases");
+        }
+    }
+    
+    template<typename T>
+    void Traverse(T& Visitor,Function const& FunctionToTraverse)
+    {
+        if(!VisitAndPoll(Visitor,FunctionToTraverse))
+        {
+            return;   
+        }
+        for(auto const& Statement : FunctionToTraverse.Content)
+        {
+            Traverse(Visitor,Statement);
+        }
+    }
 }

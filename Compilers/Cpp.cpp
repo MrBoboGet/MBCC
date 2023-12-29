@@ -232,9 +232,9 @@ namespace MBCC
         MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut)
     {
         p_WriteSource(Grammar,ProductionsLOOk,HeaderName,SourceOut); 
-        p_WriteHeader(Grammar,HeaderOut);
+        WriteHeader(Grammar,HeaderOut);
     }
-    void CPPParserGenerator::p_WriteHeader(MBCCDefinitions const& Grammar, MBUtility::MBOctetOutputStream& HeaderOut)
+    void CPPParserGenerator::WriteHeader(MBCCDefinitions const& Grammar, MBUtility::MBOctetOutputStream& HeaderOut)
     {
 
         HeaderOut << "#pragma once\n";
@@ -285,7 +285,7 @@ namespace MBCC
         ParserGenerator.WriteNonTerminalFunctions(Grammar,ProductionsLOOk,SourceOut);
     }
 
-    std::string CPPParserGenerator::GetTypeString(MBCCDefinitions const& Grammar,TypeInfo Type) 
+    std::string CPPParserGenerator::GetString(MBCCDefinitions const& Grammar,TypeInfo Type)
     {
         std::string ReturnValue;
         bool IsList = (Type & TypeFlags::List) != 0;
@@ -304,6 +304,10 @@ namespace MBCC
         }
         if(IsList) ReturnValue += ">"; 
         return(ReturnValue);
+    }
+    std::string CPPParserGenerator::GetTypeString(MBCCDefinitions const& Grammar,TypeInfo Type) 
+    {
+        return GetString(Grammar,Type);
     }
     std::string CPPParserGenerator::GetRHSString(MBCCDefinitions const& Grammar,RuleComponent const& ComponentToInspect) 
     {

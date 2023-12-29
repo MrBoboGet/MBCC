@@ -6,7 +6,7 @@
 /out
 /compile_commands.json
 /MBPM_FileInfo
-/CMakeLists.txt
+!/CMakeLists.txt
 /Spec2.mbnf
 /MBObjectSpec_Parser.cpp
 /MBObjectSpec_Parser.h
