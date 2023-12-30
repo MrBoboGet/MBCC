@@ -102,6 +102,15 @@ namespace MBCC
             auto IDToCompare = GetTypeBegin<T>();
             return(IDToCompare <= m_TypeID && m_TypeID < GetTypeEnd<T>());
         }
+        template<typename T,typename = std::enable_if_t<std::is_base_of<C,T>::value>> 
+        T& GetOrAssign()
+        {
+            if(!IsType<T>())
+            {
+                *this = PolyBase(T());
+            }
+            return GetType<T>();
+        }
         bool IsEmpty() const
         {
             return m_Data == nullptr;

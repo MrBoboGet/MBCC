@@ -7,6 +7,9 @@ namespace MBCC
     {
         std::vector<std::vector<std::string>> m_ProductionPredicates;
 
+
+        static void p_WriteLOOKTable(MBUtility::MBOctetOutputStream& OutStream,LookType const& Look);
+
         void p_WriteParser(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,
                 std::string const& HeaderName,
                 MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut);

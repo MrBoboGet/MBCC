@@ -4,6 +4,8 @@
 
 #include <MBUtility/StaticVariant.h>
 #include <type_traits>
+
+#include <assert.h>
 namespace MBCC
 {
     //struct Type
@@ -92,7 +94,7 @@ namespace MBCC
         Expr_GetVar ListVariable;
     };
 
-    class Expression : public MBUtility::StaticVariant< Expr_LOOKValue,Expr_GetVar,Expr_Integer,Expr_Bool,Expr_String,Expr_ParseDirect,Expr_Convert,Expr_And,Expr_Equality,Expr_PeekValue,Expr_PeekType,Expr_PeekPosition,Expr_DefaultConstruct,Expr_GetBack>
+    class Expression : public MBUtility::StaticVariant<std::monostate,Expr_LOOKValue,Expr_GetVar,Expr_Integer,Expr_Bool,Expr_String,Expr_ParseDirect,Expr_Convert,Expr_And,Expr_Equality,Expr_PeekValue,Expr_PeekType,Expr_PeekPosition,Expr_DefaultConstruct,Expr_GetBack>
     {
     public:
         template<typename T,typename = InVariant<T>>
@@ -217,16 +219,34 @@ namespace MBCC
     };
     void ConvertRuleBody( MBCCDefinitions const& Grammar,
             LookType  const& TotalProductions,
+            std::vector<int> const& NonTermOffset,
             NonTerminalIndex NonTermIndex,
             ParseRule const& Production,
             std::vector<Statement>& OutStatements,
             std::unordered_map<std::string,DelayedAssignment>& DelayedAssignments);
-    Expression GetLookPredicate(MBCCDefinitions const& Grammar,LookType const& TotalProductions,NonTerminalIndex NonTerminal,int Production);
-    std::vector<Statement> GetProductionContent(MBCCDefinitions const& Grammar,LookType const& TotalProductions, NonTerminalIndex TerminalIndex,int ProductionIndex);
-    Function ConvertDirectionFunction(MBCCDefinitions const& Grammar,LookType const& TotalProductions,
-            NonTerminalIndex TerminalIndex,int ProductionIndex);
-    Function ConvertFillFunction(MBCCDefinitions const& Grammar,LookType const& TotalProductions,
-            NonTerminalIndex TerminalIndex,int ProductionIndex);
+    Expression GetLookPredicate(
+            MBCCDefinitions const& Grammar,
+            LookType const& TotalProductions,
+            std::vector<int> const& NonTermOffset,
+            NonTerminalIndex NonTerminal,
+            int Production);
+    std::vector<Statement> GetProductionContent(
+            MBCCDefinitions const& Grammar,
+            LookType const& TotalProductions, 
+            std::vector<int> const& NonTermOffset,
+            NonTerminalIndex TerminalIndex,
+            int ProductionIndex);
+    Function ConvertDirectionFunction(MBCCDefinitions const& Grammar,
+            LookType const& TotalProductions,
+            std::vector<int> const& NonTermOffset,
+            NonTerminalIndex TerminalIndex,
+            int ProductionIndex);
+    Function ConvertFillFunction(MBCCDefinitions const& Grammar,
+            LookType const& TotalProductions,
+            std::vector<int> const& NonTermOffset,
+            NonTerminalIndex TerminalIndex,
+            int ProductionIndex);
+    std::vector<int> CalculateNonTermOffsets(LookType const& Look);
     std::vector<Function> ConvertToIR(MBCCDefinitions const& Grammar,LookType const& TotalProductions);
 
 
@@ -261,6 +281,8 @@ namespace MBCC
         std::is_constructible<Expression,S>>>>
     void Traverse(T& Visitor,S const& ExpressionToTraverse)
     {
+        //bool NotMonoState = !std::is_same_v<std::monostate,S>;
+        //assert(NotMonoState && "Empty expression traversed");
         if constexpr(std::is_same_v<S,Expr_LOOKValue>)
         {
             auto const& Look = static_cast<Expr_LOOKValue const&>(ExpressionToTraverse);

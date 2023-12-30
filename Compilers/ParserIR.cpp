@@ -9,19 +9,23 @@ namespace MBCC
         std::string ReturnValue = std::accumulate(Var.Names.begin(),Var.Names.end(),std::string("i"),[](std::string const& lhs,std::string const& rhs){return lhs+"_"+rhs;});
         return ReturnValue;
     }
-    Expr_GetVar h_GetLHS(MemberReference const& Var,bool Delayed)
+    Expr_GetVar h_GetLHS(TypeInfo BaseType,MemberReference const& Var,bool Delayed)
     {
         Expr_GetVar ReturnValue;
         if(Delayed)
         {
             ReturnValue.Fields.push_back(h_GetDelayedVarName(Var));
+            ReturnValue.FieldTypes.push_back(BaseType);
             return ReturnValue;
         }
+        ReturnValue.Fields.push_back("ReturnValue");
+        ReturnValue.FieldTypes.push_back(BaseType);
         for(int i = 0; i < Var.Names.size();i++)
         {
             if(i == 0 && Var.Names[i] == "this")
             {
-                ReturnValue.Fields.push_back("ReturnValue");
+                assert(Var.Names.size() == 1);
+                return ReturnValue;
             }
             else
             {
@@ -50,7 +54,7 @@ namespace MBCC
                 return Expr_PeekValue();
             }
         }
-        else if(Var.IsType<MemberReference>())
+        if(Var.IsType<MemberReference>())
         {
             //parsing some non-terminal
             auto const& MemberRef = Var.GetType<MemberReference>();
@@ -75,6 +79,7 @@ namespace MBCC
                     Parse.SubFields.push_back(MemberRef.Names[i]);
                     Parse.FieldTypes.push_back(MemberRef.PartTypes[i]);
                 }
+                return Parse;
             }
         }
         else if(Var.IsType<Literal>())
@@ -109,7 +114,7 @@ namespace MBCC
         }
         return ReturnValue;
     }
-    Expression h_GetComponentPredicate(LookType const& TotalProductions,MBCCDefinitions const& Grammar,RuleComponent const& Component)
+    Expression h_GetComponentPredicate(LookType const& TotalProductions,MBCCDefinitions const& Grammar,std::vector<int> const& NonTermOffset,RuleComponent const& Component)
     {
         Expression ReturnValue;
         if(Component.IsTerminal)
@@ -125,14 +130,14 @@ namespace MBCC
         }
         else
         {
-            return GetLookPredicate(Grammar,TotalProductions,Component.ComponentIndex,-1);
+            return GetLookPredicate(Grammar,TotalProductions,NonTermOffset,Component.ComponentIndex,-1);
         }
         return ReturnValue;
     }
     std::string h_GetTargetName(MBCCDefinitions const& Grammar,RuleComponent const& ComponentToVerify)
     {
         std::string ReturnValue;
-        if(ComponentToVerify.IsTerminal)
+        if(!ComponentToVerify.IsTerminal)
         {
             ReturnValue = Grammar.NonTerminals[ComponentToVerify.ComponentIndex].Name;
         }
@@ -142,10 +147,10 @@ namespace MBCC
         }
         return ReturnValue;
     }
-    Statement h_VerifyComponent(MBCCDefinitions const& Grammar,LookType const& Look,NonTerminalIndex const& NonTermIndex ,RuleComponent const& ComponentToVerify)
+    Statement h_VerifyComponent(MBCCDefinitions const& Grammar,LookType const& Look,std::vector<int> const& NonTermOffset,NonTerminalIndex NonTermIndex ,RuleComponent const& ComponentToVerify)
     {
         Statement_If CheckLook;
-        CheckLook.Condition = h_GetComponentPredicate(Look,Grammar,ComponentToVerify);
+        CheckLook.Condition = h_GetComponentPredicate(Look,Grammar,NonTermOffset,ComponentToVerify);
         if(CheckLook.Condition.IsType<Expr_And>()) CheckLook.Condition.GetType<Expr_And>().Negated = true;
         if(CheckLook.Condition.IsType<Expr_Equality>()) CheckLook.Condition.GetType<Expr_Equality>().Negated = true;
         CheckLook.Content.emplace_back(Statement_Exception(Grammar.NonTerminals[NonTermIndex].Name,h_GetTargetName(Grammar,ComponentToVerify)));
@@ -153,6 +158,7 @@ namespace MBCC
     }
     std::vector<Statement> h_GetComponentBody( MBCCDefinitions const& Grammar,
             LookType const& TotalProductions,
+            std::vector<int> const& NonTermOffset,
             NonTerminalIndex NonTermIndex,
             ParseRule const& Rule, 
             RuleComponent const& ComponentToWrite, 
@@ -166,8 +172,8 @@ namespace MBCC
             for(int i = 0; i < InlineNonTerm.Rules.size();i++)
             {
                 Statement_If NewIf;
-                NewIf.Condition = GetLookPredicate(Grammar,TotalProductions,ComponentToWrite.ComponentIndex,i);
-                ConvertRuleBody(Grammar,TotalProductions,ComponentToWrite.ComponentIndex,InlineNonTerm.Rules[i],NewIf.Content,DelayedAssignments);
+                NewIf.Condition = GetLookPredicate(Grammar,TotalProductions,NonTermOffset,ComponentToWrite.ComponentIndex,i);
+                ConvertRuleBody(Grammar,TotalProductions,NonTermOffset,ComponentToWrite.ComponentIndex,InlineNonTerm.Rules[i],NewIf.Content,DelayedAssignments);
                 Rules.push_back(std::move(NewIf));
             }
             Statement_If ElseCase;
@@ -179,9 +185,13 @@ namespace MBCC
             return ReturnValue;
         }
         bool IsSpecial = (ComponentToWrite.ReferencedRule.IsType<MemberReference>() && ComponentToWrite.ReferencedRule.GetType<MemberReference>().Names[0] == "TOKEN");
-      
+     
+        if(ComponentToWrite.Min >= 1)
+        {
+            ReturnValue.push_back(h_VerifyComponent(Grammar,TotalProductions,NonTermOffset,NonTermIndex,ComponentToWrite));
+        }
         //verify correct lookahead for better error messages
-        
+
         if(!ComponentToWrite.ReferencedRule.IsEmpty())
         {
             if(ComponentToWrite.AssignedMember.IsEmpty())
@@ -200,15 +210,16 @@ namespace MBCC
             }
             else
             {
-                auto LHS = h_GetLHS(ComponentToWrite.AssignedMember.GetType<MemberReference>(),false);
+                auto LHS = h_GetLHS(Grammar.NonTerminals[NonTermIndex].AssociatedStruct,ComponentToWrite.AssignedMember.GetType<MemberReference>(),false);
                 bool IsAssignment = IsSpecial || ComponentToWrite.IsTerminal || ComponentToWrite.ReferencedRule.IsType<Literal>() ||
                     ComponentToWrite.ReferencedRule.GetType<MemberReference>().Names.size() > 1;
 
                 if(ComponentToWrite.AssignOrder && Rule.NeedsAssignmentOrder && ComponentToWrite.AssignedMember.GetType<MemberReference>().Names[0] != "this")
                 {
                     DelayedAssignment DelayedInfo;
+                    DelayedInfo.Assignment.Variable = LHS;
+                    LHS = h_GetLHS(Grammar.NonTerminals[NonTermIndex].AssociatedStruct,ComponentToWrite.AssignedMember.GetType<MemberReference>(),true);
                     DelayedInfo.Assignment.Value = LHS;
-                    DelayedInfo.Assignment.Variable = h_GetLHS(ComponentToWrite.AssignedMember.GetType<MemberReference>(),false);
                     DelayedInfo.Variable.VarType = ComponentToWrite.AssignedMember.ResultType;
                     std::string VarName = h_GetDelayedVarName(ComponentToWrite.AssignedMember.GetType<MemberReference>());
                     DelayedInfo.Variable.Name = VarName;
@@ -230,13 +241,14 @@ namespace MBCC
                     {
                         Statement_AddList ListAdd;
                         ListAdd.Variable = LHS;
-                        ListAdd.Value = Expr_DefaultConstruct{ComponentToWrite.ReferencedRule.ResultType};
+                        ListAdd.Value = Expr_DefaultConstruct{ComponentToWrite.ReferencedRule.ResultType & TypeFlags::Base};
                         Statement_FillVar Fill;
                         Fill.ValueToFill = Expr_GetBack{LHS};
                         Fill.NonTerminal = ComponentToWrite.ComponentIndex;
-                        Fill.FillType = Grammar.NonTerminals[ComponentToWrite.ComponentIndex].AssociatedStruct;
-                        Fill.VarType = ComponentToWrite.AssignedMember.ResultType;
+                        Fill.FillType = ComponentToWrite.ReferencedRule.ResultType & TypeFlags::Base;
+                        Fill.VarType = ComponentToWrite.AssignedMember.ResultType  & TypeFlags::Base;
                         ReturnValue.push_back(std::move(ListAdd));
+                        ReturnValue.push_back(std::move(Fill));
                     }
                 }
                 else
@@ -253,8 +265,8 @@ namespace MBCC
                         Statement_FillVar AssignVar;
                         AssignVar.ValueToFill = std::move(LHS);
                         AssignVar.NonTerminal = ComponentToWrite.ComponentIndex;
-                        AssignVar.FillType = Grammar.NonTerminals[ComponentToWrite.ComponentIndex].AssociatedStruct;
-                        AssignVar.VarType = ComponentToWrite.AssignedMember.ResultType;
+                        AssignVar.FillType = ComponentToWrite.ReferencedRule.ResultType & TypeFlags::Base;
+                        AssignVar.VarType = ComponentToWrite.AssignedMember.ResultType & TypeFlags::Base;
                         ReturnValue.push_back(std::move(AssignVar));
                     }
                 }
@@ -272,6 +284,7 @@ namespace MBCC
     }
     void h_ConvertComponent( MBCCDefinitions const& Grammar,
             LookType const& TotalProductions,
+            std::vector<int> const& NonTermOffset,
             NonTerminalIndex NonTermIndex,
             ParseRule const& Rule, 
             RuleComponent const& ComponentToWrite, 
@@ -279,25 +292,25 @@ namespace MBCC
             std::unordered_map<std::string,DelayedAssignment>& DelayedAssignments)
     {
         auto const& AssociatedNonTerminal  = Grammar.NonTerminals[NonTermIndex];
-        std::vector<Statement> Body = h_GetComponentBody(Grammar,TotalProductions,NonTermIndex,Rule,ComponentToWrite,DelayedAssignments);
+        std::vector<Statement> Body = h_GetComponentBody(Grammar,TotalProductions,NonTermOffset,NonTermIndex,Rule,ComponentToWrite,DelayedAssignments);
         if(ComponentToWrite.Max == 1 && ComponentToWrite.Min == 0)
         {
             Statement_If NewStatement;
-            NewStatement.Condition = h_GetComponentPredicate(TotalProductions,Grammar,ComponentToWrite);
+            NewStatement.Condition = h_GetComponentPredicate(TotalProductions,Grammar,NonTermOffset,ComponentToWrite);
             NewStatement.Content = std::move(Body);
             OutStatements.push_back(std::move(NewStatement));
         }
         else if(ComponentToWrite.Min == 0 && ComponentToWrite.Max == -1)
         {
             Statement_While NewStatement;
-            NewStatement.Condition = h_GetComponentPredicate(TotalProductions,Grammar,ComponentToWrite);
+            NewStatement.Condition = h_GetComponentPredicate(TotalProductions,Grammar,NonTermOffset,ComponentToWrite);
             NewStatement.Content = std::move(Body);
             OutStatements.push_back(std::move(NewStatement));
         }
         else if(ComponentToWrite.Min == 1 && ComponentToWrite.Max == -1)
         {
             Statement_DoWhile NewStatement;
-            NewStatement.Condition = h_GetComponentPredicate(TotalProductions,Grammar,ComponentToWrite);
+            NewStatement.Condition = h_GetComponentPredicate(TotalProductions,Grammar,NonTermOffset,ComponentToWrite);
             NewStatement.Content = std::move(Body);
             OutStatements.push_back(std::move(NewStatement));
         }
@@ -309,6 +322,7 @@ namespace MBCC
     }
     void ConvertRuleBody( MBCCDefinitions const& Grammar,
             LookType  const& TotalProductions,
+            std::vector<int> const& NonTermOffset,
             NonTerminalIndex NonTermIndex,
             ParseRule const& Production,
             std::vector<Statement>& OutStatements,
@@ -330,15 +344,15 @@ namespace MBCC
                 RegularComponentCount++;   
             }
             auto const& Component = *ComponentPointer;
-            h_ConvertComponent(Grammar,TotalProductions,NonTermIndex,Production,*ComponentPointer,OutStatements,DelayedAssignments);
+            h_ConvertComponent(Grammar,TotalProductions,NonTermOffset,NonTermIndex,Production,*ComponentPointer,OutStatements,DelayedAssignments);
         }
     }
-    std::vector<Statement> GetProductionContent(MBCCDefinitions const& Grammar,LookType const& TotalProductions, NonTerminalIndex TerminalIndex,int ProductionIndex)
+    std::vector<Statement> GetProductionContent(MBCCDefinitions const& Grammar,LookType const& TotalProductions, std::vector<int> const& NonTermOffset,NonTerminalIndex TerminalIndex,int ProductionIndex)
     {
         std::vector<Statement> ReturnValue;
         std::vector<Statement> Content;
         std::unordered_map<std::string,DelayedAssignment> DelayedAssignments;
-        ConvertRuleBody(Grammar,TotalProductions,TerminalIndex,Grammar.NonTerminals[TerminalIndex].Rules[ProductionIndex],Content,DelayedAssignments);
+        ConvertRuleBody(Grammar,TotalProductions,NonTermOffset,TerminalIndex,Grammar.NonTerminals[TerminalIndex].Rules[ProductionIndex],Content,DelayedAssignments);
 
         for(auto& Assignment : DelayedAssignments)
         {
@@ -353,18 +367,19 @@ namespace MBCC
         return ReturnValue;
     }
     Function ConvertDirectionFunction(MBCCDefinitions const& Grammar,LookType const& TotalProductions,
-            NonTerminalIndex TerminalIndex,int ProductionIndex)
+            std::vector<int> const& NonTermOffset,NonTerminalIndex TerminalIndex,int ProductionIndex)
     {
         Function ReturnValue;
         ReturnValue.Direct = true;
-        StructDefinition const* AssoicatedStruct = nullptr;
+        StructDefinition const* AssociatedStruct = nullptr;
         NonTerminal const& AssociatedNonTerminal = Grammar.NonTerminals[TerminalIndex];
         ReturnValue.NonTerminal = TerminalIndex;
+        ReturnValue.ProductionIndex = ProductionIndex;
         if(AssociatedNonTerminal.AssociatedStruct != -1)
         {
-            AssoicatedStruct = &Grammar.Structs[AssociatedNonTerminal.AssociatedStruct];    
+            AssociatedStruct = &Grammar.Structs[AssociatedNonTerminal.AssociatedStruct];    
         }
-        if(AssoicatedStruct != nullptr)
+        if(AssociatedStruct != nullptr)
         {
             ReturnValue.ReturnType = AssociatedNonTerminal.AssociatedStruct;
         }
@@ -375,7 +390,8 @@ namespace MBCC
         FillVar.ValueToFill = Expr_GetVar{{"ReturnValue"},{AssociatedNonTerminal.AssociatedStruct}};
         FillVar.NonTerminal = TerminalIndex;
         FillVar.ProductionIndex = ProductionIndex;
-        
+        FillVar.FillType =  AssociatedNonTerminal.AssociatedStruct;
+        FillVar.VarType =  AssociatedNonTerminal.AssociatedStruct;
 
         Statement_Return ReturnVar;
         ReturnVar.Variable = "ReturnValue";
@@ -407,7 +423,7 @@ namespace MBCC
         return ReturnValue;
     }
     Function ConvertFillFunction(MBCCDefinitions const& Grammar,LookType const& TotalProductions,
-            NonTerminalIndex TerminalIndex,int ProductionIndex)
+            std::vector<int> const& NonTermOffset,NonTerminalIndex TerminalIndex,int ProductionIndex)
     {
         //void return value
         Function ReturnValue;
@@ -415,18 +431,19 @@ namespace MBCC
         ReturnValue.NonTerminal = TerminalIndex;
         ReturnValue.ProductionIndex = ProductionIndex;
         auto const& NonTerminal = Grammar.NonTerminals[TerminalIndex];
+        ReturnValue.ReturnType = NonTerminal.AssociatedStruct;
         if(ProductionIndex == -1)
         {
             if(NonTerminal.Rules.size() == 1)
             {
-                ReturnValue.Content = GetProductionContent(Grammar,TotalProductions,TerminalIndex,0);
+                ReturnValue.Content = GetProductionContent(Grammar,TotalProductions,NonTermOffset,TerminalIndex,0);
                 return ReturnValue;
             } 
             Statement_IfChain Content;
             for(int i = 0; i < NonTerminal.Rules.size();i++)
             {
                 Statement_If NewIf;
-                NewIf.Condition = GetLookPredicate(Grammar,TotalProductions,TerminalIndex,i);
+                NewIf.Condition = GetLookPredicate(Grammar,TotalProductions,NonTermOffset,TerminalIndex,i);
                 NewIf.Content.emplace_back(h_FillReturnValue(Grammar,TotalProductions,TerminalIndex,ProductionIndex));
                 Content.Alternatives.push_back(std::move(NewIf));
             }
@@ -436,15 +453,17 @@ namespace MBCC
             Exception.NonTerminalName = NonTerminal.Name;
             ExceptionPath.Content.emplace_back(Exception);
             Content.Alternatives.push_back(std::move(ExceptionPath));
+            ReturnValue.Content.push_back(std::move(Content));
         }
         else
         {
-            ReturnValue.Content = GetProductionContent(Grammar,TotalProductions,TerminalIndex,ProductionIndex);
+            ReturnValue.Content = GetProductionContent(Grammar,TotalProductions,NonTermOffset,TerminalIndex,ProductionIndex);
         }
 
         return ReturnValue;
     }
-    Expression GetLookPredicate(MBCCDefinitions const& Grammar,LookType const& TotalProductions,NonTerminalIndex NonTermIndex,int Production)
+    Expression GetLookPredicate(MBCCDefinitions const& Grammar,LookType const& TotalProductions,
+            std::vector<int> const& NonTermOffset,NonTerminalIndex NonTermIndex,int Production)
     {
         auto const& NonTerm = Grammar.NonTerminals[NonTermIndex];
         int k = TotalProductions[0][0].NumberOfColumns();
@@ -453,16 +472,29 @@ namespace MBCC
         for(int i = 0; i < k; i++)
         {
             Expr_LOOKValue NewValue;
-            NewValue.Indexes.push_back(Expr_Integer{NonTermIndex});
-            NewValue.Indexes.push_back(Expr_Integer{Production});
+            NewValue.Indexes.push_back(Expr_Integer{NonTermOffset[NonTermIndex]});
+            NewValue.Indexes.push_back(Expr_Integer{i});
             NewValue.Indexes.push_back(Expr_PeekType{i});
             ReturnValue.Arguments.push_back(std::move(NewValue));
+        }
+        return ReturnValue;
+    }
+    std::vector<int> CalculateNonTermOffsets(LookType const& Look)
+    {
+        std::vector<int> ReturnValue;
+        ReturnValue.reserve(Look.size());
+        int CurrentOffset = 0;
+        for(auto const& Production : Look)
+        {
+            ReturnValue.push_back(CurrentOffset);
+            CurrentOffset += Production.size()+1;
         }
         return ReturnValue;
     }
     std::vector<Function> ConvertToIR(MBCCDefinitions const& Grammar,LookType const& TotalProductions)
     {
         std::vector<Function> ReturnValue;
+        auto NonTermOffset = CalculateNonTermOffsets(TotalProductions);
         for(int i = 0; i < Grammar.NonTerminals.size();i++)
         {
             auto const& NonTerm = Grammar.NonTerminals[i];
@@ -472,11 +504,10 @@ namespace MBCC
             }
             for(int k = 0; k < NonTerm.Rules.size();k++)
             {
-                ReturnValue.push_back(ConvertFillFunction(Grammar,TotalProductions,i,k));
-                ReturnValue.push_back(ConvertDirectionFunction(Grammar,TotalProductions,i,k));
+                ReturnValue.push_back(ConvertFillFunction(Grammar,TotalProductions,NonTermOffset,i,k));
             }
-            ReturnValue.push_back(ConvertFillFunction(Grammar,TotalProductions,i,-1));
-            ReturnValue.push_back(ConvertDirectionFunction(Grammar,TotalProductions,i,-1));
+            ReturnValue.push_back(ConvertFillFunction(Grammar,TotalProductions,NonTermOffset,i,-1));
+            ReturnValue.push_back(ConvertDirectionFunction(Grammar,TotalProductions,NonTermOffset,i,-1));
         }
         return ReturnValue;
     }

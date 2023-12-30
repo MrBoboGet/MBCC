@@ -270,9 +270,11 @@ namespace MBCC
                 ReturnValueType = AssoicatedStruct->Name;
             }
             MBUtility::WriteData(HeaderOut,ReturnValueType+" Parse"+AssociatedNonTerminal.Name+"(MBCC::Tokenizer& Tokenizer);\n");
+            HeaderOut<<"void Fill"<<AssociatedNonTerminal.Name<<"("<<ReturnValueType<<"& ReturnValue,MBCC::Tokenizer& Tokenizer);\n";
             for(int i = 0; i < AssociatedNonTerminal.Rules.size();i++)
             {
                 HeaderOut<<ReturnValueType<<" Parse"<<AssociatedNonTerminal.Name<<"_"<<std::to_string(i)<<"(MBCC::Tokenizer& Tokenizer);\n"; 
+                HeaderOut<<"void Fill"<<AssociatedNonTerminal.Name<<"_"<< std::to_string(i)<<"("<<ReturnValueType<<"& ReturnValue,MBCC::Tokenizer& Tokenizer);\n";
             }
         }
     }
