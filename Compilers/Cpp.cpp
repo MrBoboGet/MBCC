@@ -75,6 +75,10 @@ namespace MBCC
     void h_WriteStructures(MBCCDefinitions const& Grammar,DependancyInfo const& DepInfo,MBUtility::MBOctetOutputStream& HeaderOut)
     {
         std::vector<StructIndex> AbstractStructs;
+        for(auto const& Struct : Grammar.Structs)
+        {
+            HeaderOut<<"class "<<Struct.Name<<";";
+        }
         //One of baseses
         for(StructIndex CurrentIndex : DepInfo.StructureDependancyOrder)
         {
@@ -152,7 +156,13 @@ namespace MBCC
             if(DepInfo.ChildrenMap[CurrentIndex].size() > 0)
             {
                 auto const& ContainerName = Grammar.Structs[CurrentIndex].Name;
-                std::string InheritName = "MBCC::PolyBase<"+StructName+">";
+                std::string InheritName = "MBCC::PolyBase<"+StructName;
+                for(auto const& Child : DepInfo.ChildrenMap[CurrentIndex])
+                {
+                    InheritName += ",";
+                    InheritName += Grammar.Structs[Child].Name;
+                }
+                InheritName += ">";
                 HeaderOut<<"class "<<Grammar.Structs[CurrentIndex].Name<< " : public "<< InheritName<<"\n{\n";
                 HeaderOut<<"public:\n";
                 HeaderOut<<"typedef "<<InheritName<<" Base;\n";
@@ -161,8 +171,8 @@ namespace MBCC
                 {
                     auto const& ParentName = Grammar.Structs[CurrentIndex].ParentStruct;
                     //having a parent always means that that parent is polymorphic
-                    HeaderOut<<"operator "<<ParentName<<"()&&\n{\n";
-                    HeaderOut<<"return("<<ParentName<<"(std::move(m_Data),m_TypeID));\n}\n";
+                    //HeaderOut<<"operator "<<ParentName<<"()&&\n{\n";
+                    //HeaderOut<<"return("<<ParentName<<"(std::move(m_Data),m_TypeID));\n}\n";
                 }
                 HeaderOut<<"\n};\n";
             }
@@ -181,10 +191,10 @@ namespace MBCC
         for(int CurrentStruct = 0; CurrentStruct < Grammar.Structs.size();CurrentStruct++)
         {
             std::string StructName = Grammar.Structs[CurrentStruct].Name;
-            if(DepInfo.ChildrenMap[CurrentStruct].size() != 0)
-            {
-                StructName += "_Base";   
-            }
+            //if(DepInfo.ChildrenMap[CurrentStruct].size() != 0)
+            //{
+            //    StructName += "_Base";   
+            //}
             HeaderOut<<"template<> inline int MBCC::GetTypeBegin<" << StructName <<">(){return("<<std::to_string(BeginList[CurrentStruct])<<");}\n";
             HeaderOut<<"template<> inline int MBCC::GetTypeEnd<" << StructName <<">(){return("<<std::to_string(EndList[CurrentStruct])<<");}\n";
         }
