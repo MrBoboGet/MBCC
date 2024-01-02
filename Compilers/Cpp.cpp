@@ -166,7 +166,12 @@ namespace MBCC
                 HeaderOut<<"class "<<Grammar.Structs[CurrentIndex].Name<< " : public "<< InheritName<<"\n{\n";
                 HeaderOut<<"public:\n";
                 HeaderOut<<"typedef "<<InheritName<<" Base;\n";
+                HeaderOut<<"typedef "<<StructName<<" BASE;\n";
                 HeaderOut<<"using Base::Base;\n";
+                
+                HeaderOut<<"template<typename T>\n";
+                HeaderOut<<ContainerName<<"& operator=(T&& ObjectToStore)\n{\nstatic_cast<Base&>(*this) = std::forward<T>(ObjectToStore);\nreturn *this;\n}\n";
+                
                 if(Grammar.Structs[CurrentIndex].ParentStruct != "")
                 {
                     auto const& ParentName = Grammar.Structs[CurrentIndex].ParentStruct;
@@ -205,8 +210,7 @@ namespace MBCC
         ParserCompilerHandler::VerifyNotLeftRecursive(Grammar,ERules);
         GLA GrammarGLA(Grammar,k);
         std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> TotalProductions = ParserCompilerHandler::CalculateProductionsLinearApproxLOOK(Grammar,ERules,GrammarGLA,k);
-        NonTerminalIndex NonTermIndex = 0;
-        for(auto const& Productions : TotalProductions)
+        NonTerminalIndex NonTermIndex = 0; for(auto const& Productions : TotalProductions)
         {
             if(!RulesAreDisjunct(Productions))
             {

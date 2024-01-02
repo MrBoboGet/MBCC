@@ -186,7 +186,7 @@ namespace MBCC
         }
         bool IsSpecial = (ComponentToWrite.ReferencedRule.IsType<MemberReference>() && ComponentToWrite.ReferencedRule.GetType<MemberReference>().Names[0] == "TOKEN");
      
-        if(ComponentToWrite.Min >= 1)
+        if(ComponentToWrite.Min >= 1 && !IsSpecial && !ComponentToWrite.ReferencedRule.IsType<Literal>())
         {
             ReturnValue.push_back(h_VerifyComponent(Grammar,TotalProductions,NonTermOffset,NonTermIndex,ComponentToWrite));
         }
@@ -444,7 +444,7 @@ namespace MBCC
             {
                 Statement_If NewIf;
                 NewIf.Condition = GetLookPredicate(Grammar,TotalProductions,NonTermOffset,TerminalIndex,i);
-                NewIf.Content.emplace_back(h_FillReturnValue(Grammar,TotalProductions,TerminalIndex,ProductionIndex));
+                NewIf.Content.emplace_back(h_FillReturnValue(Grammar,TotalProductions,TerminalIndex,i));
                 Content.Alternatives.push_back(std::move(NewIf));
             }
             Statement_If ExceptionPath;
@@ -467,12 +467,19 @@ namespace MBCC
     {
         auto const& NonTerm = Grammar.NonTerminals[NonTermIndex];
         int k = TotalProductions[0][0].NumberOfColumns();
-        if(Production == -1) Production = NonTerm.Rules.size();
+        if(Production == -1)
+        {
+            Production = 0;
+        } 
+        else
+        {
+            Production = Production+1;   
+        }
         Expr_And ReturnValue;
         for(int i = 0; i < k; i++)
         {
             Expr_LOOKValue NewValue;
-            NewValue.Indexes.push_back(Expr_Integer{NonTermOffset[NonTermIndex]});
+            NewValue.Indexes.push_back(Expr_Integer{NonTermOffset[NonTermIndex] + Production});
             NewValue.Indexes.push_back(Expr_Integer{i});
             NewValue.Indexes.push_back(Expr_PeekType{i});
             ReturnValue.Arguments.push_back(std::move(NewValue));
