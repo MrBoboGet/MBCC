@@ -272,6 +272,12 @@ namespace MBCC
             Line = LinePos;
             ByteOffset = NewByteOffset;   
         }
+        TokenPosition operator+(int Rhs) const
+        {
+            TokenPosition ReturnValue = *this;   
+            ReturnValue.ByteOffset += Rhs;
+            return ReturnValue;
+        }
         bool operator<(TokenPosition const& Rhs) const noexcept
         {
             bool ReturnValue = false;

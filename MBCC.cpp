@@ -792,7 +792,7 @@ struct Hej1 : Hej2
             NewComponent.ReferencedRule = std::move(RuleExpression);
             if(NewComponent.ReferencedRule.IsType<MemberReference>() && NewComponent.ReferencedRule.GetType<MemberReference>().Names[0] == "TOKEN")
             {
-                CurrentRule.MetaComponents.push_back({TotalComponents,std::move(NewComponent)});
+                CurrentRule.MetaComponents.push_back({ CurrentRule.Components.size() + CurrentRule.MetaComponents.size() ,std::move(NewComponent)});
             }
             else
             {
