@@ -585,7 +585,7 @@ struct Hej1 : Hej2
                 NewLambda.Name = p_LambdaIDToLambdaName(CurrentLambdaID);
                 CurrentLambdaID++;
                 ParseOffset += 1;
-                NewLambda.Rules = p_ParseParseRules(Data,DataSize,ParseOffset,&ParseOffset,')',CurrentLambdaID,OutLambdas,OutInfo);
+                NewLambda.Rules = p_ParseParseRules(NewLambda.Name,Data,DataSize,ParseOffset,&ParseOffset,')',CurrentLambdaID,OutLambdas,OutInfo);
 
                 MemberExpr.Names[0] = NewLambda.Name;
                 MemberExpr.PartByteOffsets[0] = 0;
@@ -618,7 +618,7 @@ struct Hej1 : Hej2
     {
         return "_L"+std::to_string(ID);
     }
-    std::vector<ParseRule> MBCCDefinitions::p_ParseParseRules(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,char EndMarker,int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo)
+    std::vector<ParseRule> MBCCDefinitions::p_ParseParseRules(std::string const& NonTermName,const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,char EndMarker,int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo)
     {
         std::vector<ParseRule> ReturnValue;
         size_t ParseOffset = InParseOffset;
@@ -650,10 +650,11 @@ struct Hej1 : Hej2
             else if(Data[ParseOffset] == '(')
             {
                 ParseOffset += 1;
-                std::vector<ParseRule> Rules = p_ParseParseRules(Data,DataSize,ParseOffset,&ParseOffset,')',CurrentLambdaID,OutLambdas,OutInfo);
                 Lambda NewLambda;
+                NewLambda.AssociatedNonTerminal = NonTermName;
                 NewLambda.Name = p_LambdaIDToLambdaName(CurrentLambdaID);
                 CurrentLambdaID++;
+                std::vector<ParseRule> Rules = p_ParseParseRules(NonTermName,Data,DataSize,ParseOffset,&ParseOffset,')',CurrentLambdaID,OutLambdas,OutInfo);
                 NewLambda.Rules = std::move(Rules);
 
 
@@ -1498,7 +1499,7 @@ struct Hej1 : Hej2
 
                 std::vector<Lambda> Lambdas;
                 OutInfo.SemanticsTokens.push_back(DefinitionsToken(CurrentIdentifier,DefinitionsTokenType::NonTerminal));
-                std::vector<ParseRule> NewRules = p_ParseParseRules(Data,DataSize,ParseOffset,&ParseOffset,';',CurrentLamdaID,Lambdas,OutInfo);
+                std::vector<ParseRule> NewRules = p_ParseParseRules(CurrentIdentifier.Value,Data,DataSize,ParseOffset,&ParseOffset,';',CurrentLamdaID,Lambdas,OutInfo);
 
 
                 NonTerminal NewTerminal;
@@ -1546,7 +1547,7 @@ struct Hej1 : Hej2
                     }
                     else
                     {
-                        UnresolvedLambdaLinks[CurrentIdentifier.Value].push_back(NewLambda.Name);
+                        UnresolvedLambdaLinks[NewLambda.AssociatedNonTerminal].push_back(NewLambda.Name);
                         NewNonTerminal.IsInline = true;
                     }
                     ReturnValue.NonTerminals.push_back(std::move(NewNonTerminal));

@@ -403,6 +403,7 @@ namespace MBCC
         struct Lambda
         {
             Identifier Type;
+            std::string AssociatedNonTerminal;
             std::string Name;
             std::vector<ParseRule> Rules;
         };
@@ -423,7 +424,7 @@ namespace MBCC
         static StructMemberVariable p_ParseMemberVariable(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
         static StructDefinition p_ParseStruct(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
         static MemberExpression p_ParseMemberExpression(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,bool IsLHS,int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo);
-        static std::vector<ParseRule> p_ParseParseRules(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,char EndMarker,int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo);
+        static std::vector<ParseRule> p_ParseParseRules(std::string const& NonTermName,const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,char EndMarker,int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo);
         
 
         bool p_IsAssignable(StructIndex Lhs,StructIndex Rhs);
