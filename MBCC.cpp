@@ -8,7 +8,7 @@
 #include <set>
 #include <numeric>
 #include <MBParsing/MBParsing.h>
-
+#include <cstring>
 
 #include "Compilers/Cpp.h"
 #include "Compilers/CSharp.h"
@@ -520,7 +520,7 @@ struct Hej1 : Hej2
         }
         return ReturnValue;
     }
-    MemberExpression MBCCDefinitions::p_ParseMemberExpression(const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,bool IsLHS, int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo)
+    MemberExpression MBCCDefinitions::p_ParseMemberExpression(const char* Data,MBLSP::LineIndex const& Index,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,bool IsLHS, int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo)
     {
         MemberExpression ReturnValue;
         size_t ParseOffset = InParseOffset;
@@ -585,7 +585,7 @@ struct Hej1 : Hej2
                 NewLambda.Name = p_LambdaIDToLambdaName(CurrentLambdaID);
                 CurrentLambdaID++;
                 ParseOffset += 1;
-                NewLambda.Rules = p_ParseParseRules(NewLambda.Name,Data,DataSize,ParseOffset,&ParseOffset,')',CurrentLambdaID,OutLambdas,OutInfo);
+                NewLambda.Rules = p_ParseParseRules(NewLambda.Name,Index,Data,DataSize,ParseOffset,&ParseOffset,')',CurrentLambdaID,OutLambdas,OutInfo);
 
                 MemberExpr.Names[0] = NewLambda.Name;
                 MemberExpr.PartByteOffsets[0] = 0;
@@ -618,13 +618,14 @@ struct Hej1 : Hej2
     {
         return "_L"+std::to_string(ID);
     }
-    std::vector<ParseRule> MBCCDefinitions::p_ParseParseRules(std::string const& NonTermName,const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,char EndMarker,int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo)
+    std::vector<ParseRule> MBCCDefinitions::p_ParseParseRules(std::string const& NonTermName,MBLSP::LineIndex const& Index,const char* Data,size_t DataSize,size_t InParseOffset,size_t* OutParseOffset,char EndMarker,int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo)
     {
         std::vector<ParseRule> ReturnValue;
         size_t ParseOffset = InParseOffset;
         ParseRule CurrentRule;
         int TotalComponents = 0;
         MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
+        CurrentRule.DefinitionSite = Index.ByteOffsetToPosition(ParseOffset);
         while(ParseOffset < DataSize)
         {
             //does allow for empty rules, s
@@ -645,6 +646,7 @@ struct Hej1 : Hej2
                 TotalComponents = 0;
                 ParseOffset+=1;
                 MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
+                CurrentRule.DefinitionSite = Index.ByteOffsetToPosition(ParseOffset);
                 continue;
             }
             else if(Data[ParseOffset] == '(')
@@ -654,7 +656,7 @@ struct Hej1 : Hej2
                 NewLambda.AssociatedNonTerminal = NonTermName;
                 NewLambda.Name = p_LambdaIDToLambdaName(CurrentLambdaID);
                 CurrentLambdaID++;
-                std::vector<ParseRule> Rules = p_ParseParseRules(NonTermName,Data,DataSize,ParseOffset,&ParseOffset,')',CurrentLambdaID,OutLambdas,OutInfo);
+                std::vector<ParseRule> Rules = p_ParseParseRules(NonTermName,Index,Data,DataSize,ParseOffset,&ParseOffset,')',CurrentLambdaID,OutLambdas,OutInfo);
                 NewLambda.Rules = std::move(Rules);
 
 
@@ -698,13 +700,8 @@ struct Hej1 : Hej2
                 break;
             }
             RuleComponent NewComponent;
-            //if(Data[ParseOffset] == '>')
-            //{
-            //    NewComponent.AssignOrder = p_ParseAssignOrder(Data,DataSize,ParseOffset,&ParseOffset);
-            //    MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
-            //}
             size_t PreviousLambdaCount = OutLambdas.size();
-            MemberExpression RuleExpression = p_ParseMemberExpression(Data,DataSize,ParseOffset,&ParseOffset,true,CurrentLambdaID,OutLambdas,OutInfo);    
+            MemberExpression RuleExpression = p_ParseMemberExpression(Data,Index,DataSize,ParseOffset,&ParseOffset,true,CurrentLambdaID,OutLambdas,OutInfo);    
             MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             if(ParseOffset >= DataSize)
             {
@@ -719,7 +716,7 @@ struct Hej1 : Hej2
                 {
                     throw MBCCParseError("Syntactic error parsing MBCC definitions: lambda only allowed as the right hand side in an assignment",ParseOffset);
                 }
-                RuleExpression = p_ParseMemberExpression(Data,DataSize,ParseOffset,&ParseOffset,false,CurrentLambdaID,OutLambdas,OutInfo);
+                RuleExpression = p_ParseMemberExpression(Data,Index,DataSize,ParseOffset,&ParseOffset,false,CurrentLambdaID,OutLambdas,OutInfo);
                 MBParsing::SkipWhitespace(Data,DataSize,ParseOffset,&ParseOffset);
             }
             else
@@ -1411,6 +1408,8 @@ struct Hej1 : Hej2
         std::vector<std::pair<Identifier,Identifier>> UnresolvedDefs;
         std::unordered_map<std::string,std::vector<std::string>> UnresolvedLambdaLinks;
         int CurrentLamdaID = 1;
+
+        MBLSP::LineIndex Index(Data,DataSize);
         while(ParseOffset < DataSize)
         {
             Identifier CurrentIdentifier = p_ParseIdentifier(Data,DataSize,ParseOffset,&ParseOffset);
@@ -1499,7 +1498,7 @@ struct Hej1 : Hej2
 
                 std::vector<Lambda> Lambdas;
                 OutInfo.SemanticsTokens.push_back(DefinitionsToken(CurrentIdentifier,DefinitionsTokenType::NonTerminal));
-                std::vector<ParseRule> NewRules = p_ParseParseRules(CurrentIdentifier.Value,Data,DataSize,ParseOffset,&ParseOffset,';',CurrentLamdaID,Lambdas,OutInfo);
+                std::vector<ParseRule> NewRules = p_ParseParseRules(CurrentIdentifier.Value,Index,Data,DataSize,ParseOffset,&ParseOffset,';',CurrentLamdaID,Lambdas,OutInfo);
 
 
                 NonTerminal NewTerminal;
@@ -1647,6 +1646,7 @@ struct Hej1 : Hej2
         size_t TotalNodeSize = 2*Grammar.NonTerminals.size();
         m_NonTerminalCount = Grammar.NonTerminals.size();
         m_TerminalCount = Grammar.Terminals.size();
+        m_NonTerminalReturnStack = std::vector<std::vector<NodeIndex>>(m_NonTerminalCount);
         for(auto const& NonTerminal : Grammar.NonTerminals)
         {
             for(auto const& Rule : NonTerminal.Rules)
@@ -1663,12 +1663,14 @@ struct Hej1 : Hej2
             for(auto const& Rule : NonTerminal.Rules)
             {
                 m_Nodes[i].Edges.push_back(GLAEdge(-1,RuleOffset));
+                bool BackReference = false;
                 for(auto const& Component : Rule.Components)
                 {
-                    //if(Component.ReferencedRule.Names[0] == "TOKEN")
-                    //{
-                    //    continue;
-                    //}
+                    if(BackReference)
+                    {
+                        m_Nodes[RuleOffset].Edges.push_back(GLAEdge(-1,RuleOffset-1));   
+                        BackReference = false;
+                    }
                     if(Component.ReferencedRule.IsType<Literal>())
                     {
                         m_Nodes[RuleOffset].Edges.push_back(GLAEdge(-1,RuleOffset+1));
@@ -1685,7 +1687,7 @@ struct Hej1 : Hej2
                     else
                     {
                         //Position to start of non terminal
-                        m_Nodes[RuleOffset].Edges.push_back(GLAEdge(-1,Component.ComponentIndex));
+                        m_Nodes[RuleOffset].Edges.push_back(GLAEdge(-1,Component.ComponentIndex,RuleOffset+1));
                         //Terminal to position in parsing state
                         m_Nodes[Grammar.NonTerminals.size()+Component.ComponentIndex].Edges.push_back(GLAEdge(-1,RuleOffset+1));
 
@@ -1704,12 +1706,14 @@ struct Hej1 : Hej2
                         if(Component.Max == -1)
                         {
                             //FOLLOW, terminal can follow itself
-                            m_Nodes[Grammar.NonTerminals.size()+Component.ComponentIndex].Edges.push_back(GLAEdge(-1,Component.ComponentIndex));
+                            m_Nodes[Grammar.NonTerminals.size()+Component.ComponentIndex].Edges.push_back(GLAEdge(-1,RuleOffset));
+                            BackReference = true;
                         }
                     }
                     RuleOffset++;
                 }
                 //add end?
+                //Link to FOLLOW
                 m_Nodes[RuleOffset].Edges.push_back(GLAEdge(Grammar.Terminals.size(),Grammar.NonTerminals.size()+i));
                 RuleOffset++;
             }
@@ -1723,47 +1727,84 @@ struct Hej1 : Hej2
         } 
     }
     //NOTE exponential time implementation
-    std::vector<bool> GLA::p_LOOK(GLANode& Node,int k) const
+    void GLA::p_LOOK(std::vector<bool>& Result,GLANode& Node,int k,bool& VisitedK,bool UseFollow) const
     {
-        std::vector<bool> ReturnValue = std::vector<bool>(m_TerminalCount+1,false);
         if(k == -1)
         {
-            return(ReturnValue);   
+            return;
         }
         if(Node.Visiting[k])
         {
-            return(ReturnValue);   
+            return;
         }
         Node.Visiting[k] = true;
         for(auto const& Edge : Node.Edges)
         {
+            int NewK = k;
+            NodeIndex NewConnection = -1;
             if(Edge.ConnectionTerminal != -1)
             {
                 if(k == 0)
                 {
-                    ReturnValue[Edge.ConnectionTerminal] = true;
+                    Result[Edge.ConnectionTerminal] = true;
+                    VisitedK = true;
                     //EOF marker, special in that it both counts as a terminal
                     //and should continue the search
                     if(Edge.ConnectionTerminal == m_TerminalCount)
                     {
-                        std::vector<bool> SubValues = p_LOOK(m_Nodes[Edge.Connection],0);
-                        h_Combine(ReturnValue,SubValues);
+                        NewK = 0;
+                        NewConnection = Edge.Connection;
+                        //p_LOOK(Result,m_Nodes[Edge.Connection],0,VisitedK,UseFollow);
                     }
                 }   
-                else
+                else 
                 {
-                    std::vector<bool> SubValues = p_LOOK(m_Nodes[Edge.Connection],k-1);
-                    h_Combine(ReturnValue,SubValues);
+                    NewK = k-1;
+                    NewConnection = Edge.Connection;
+                    //p_LOOK(Result,m_Nodes[Edge.Connection],k-1,VisitedK,UseFollow);
                 }
             }
-            else
+            else 
             {
-                std::vector<bool> SubValues = p_LOOK(m_Nodes[Edge.Connection],k);   
-                h_Combine(ReturnValue,SubValues);
+                NewK = k;
+                NewConnection = Edge.Connection;
+                //p_LOOK(Result,m_Nodes[Edge.Connection],k,VisitedK,UseFollow);   
+            }
+            if(NewConnection != -1)
+            {
+                if(p_IsFollow(NewConnection))
+                {
+                    if(m_NonTerminalReturnStack[NewConnection - m_NonTerminalCount].size() != 0)
+                    {
+                        p_LOOK(Result,m_Nodes[m_NonTerminalReturnStack[NewConnection-m_NonTerminalCount].back()],NewK,VisitedK,UseFollow);
+                    }
+                    else
+                    {
+                        p_LOOK(Result,m_Nodes[NewConnection],NewK,VisitedK,UseFollow);
+                    }
+                }
+                else if(p_IsBegin(NewConnection))
+                {
+                    assert(Edge.ReturnPosition != -1);
+                    m_NonTerminalReturnStack[NewConnection].push_back(Edge.ReturnPosition);
+                    p_LOOK(Result,m_Nodes[NewConnection],NewK,VisitedK,UseFollow);
+                    m_NonTerminalReturnStack[NewConnection].pop_back();
+                }
+                else
+                {
+                    p_LOOK(Result,m_Nodes[Edge.Connection],NewK,VisitedK,UseFollow);
+                }
             }
         }
         Node.Visiting[k] = false;
-        return(ReturnValue);
+    }
+    bool GLA::p_IsFollow(NodeIndex Index) const
+    {
+        return Index >= m_NonTerminalCount && Index < m_NonTerminalCount*2;
+    }
+    bool GLA::p_IsBegin(NodeIndex Index) const
+    {
+        return Index >= 0 && Index < m_NonTerminalCount;
     }
     MBMath::MBDynamicMatrix<bool> GLA::LOOK(NonTerminalIndex NonTerminal,int ProductionIndex,int k) const
     {
@@ -1772,7 +1813,15 @@ struct Hej1 : Hej2
         for(int i = 0; i < k;i++)
         {
             MBMath::MBDynamicMatrix<bool> Visited(k,m_Nodes.size());
-            std::vector<bool> CurrentLook = p_LOOK(Node,i);
+            bool VisitedK = false;
+            std::vector<bool> CurrentLook(m_TerminalCount+1,false);
+            p_LOOK(CurrentLook,Node,i,VisitedK,false);
+
+            if(!VisitedK)
+            {
+                //slightly inefficient
+                p_LOOK(CurrentLook,m_Nodes[m_NonTerminalCount+NonTerminal],i,VisitedK,true);
+            }
             for(int j = 0; j < m_TerminalCount+1;j++)
             {
                 ReturnValue(j,i) = CurrentLook[j];
@@ -2058,19 +2107,42 @@ struct Hej1 : Hej2
         }
         return(ReturnValue);
     }
-    bool RulesAreDisjunct(std::vector<MBMath::MBDynamicMatrix<bool>> const& ProductionsToVerify)
+    std::vector<size_t> NonDisjunctRules(std::vector<MBMath::MBDynamicMatrix<bool>> const& ProductionsToVerify)
     {
-        bool ReturnValue = true;          
+        std::vector<size_t> ReturnValue;
         for(int i = 0; i < ProductionsToVerify.size();i++)
         {
             for(int j = i+1; j < ProductionsToVerify.size();j++)
             {
                 if(!h_Disjunct(ProductionsToVerify[i],ProductionsToVerify[j]))
                 {
-                    ReturnValue = false;   
-                    break;
+                    if(ReturnValue.size() == 0)
+                    {
+                        ReturnValue.push_back(i);   
+                    }
+                    ReturnValue.push_back(j);
                 }
             }    
+            if(ReturnValue.size() > 0)
+            {
+                break;   
+            }
+        }
+        return ReturnValue;
+    }
+    bool RulesAreDisjunct(std::vector<MBMath::MBDynamicMatrix<bool>> const& ProductionsToVerify)
+    {
+        bool ReturnValue = true;
+        for(int i = 0; i < ProductionsToVerify.size();i++)
+        {
+            for(int j = i+1; j < ProductionsToVerify.size();j++)
+            {
+                if(!h_Disjunct(ProductionsToVerify[i],ProductionsToVerify[j]))
+                {
+                    ReturnValue = false;
+                    break;
+                }
+            }
         }
         return(ReturnValue);
     }
@@ -2097,9 +2169,17 @@ struct Hej1 : Hej2
         NonTerminalIndex NonTermIndex = 0;
         for(auto const& Productions : TotalProductions)
         {
-            if(!RulesAreDisjunct(Productions))
+            if(auto ClashingRules = NonDisjunctRules(Productions); ClashingRules.size() != 0)
             {
-                throw std::runtime_error("Error creating linear-approximate-LL("+std::to_string(Options.k)+") parser for grammar: Rule \""+Grammar.NonTerminals[NonTermIndex].Name+"\" is non deterministic");
+                std::string ErrorString = "Error creating linear-approximate-LL("+std::to_string(Options.k)+") parser for grammar: Rule \""+Grammar.NonTerminals[NonTermIndex].Name+"\" is non deterministic\n";
+                ErrorString += "Clashing alternatives:\n";
+                for(auto const& ClashingRule : ClashingRules)
+                {
+                    auto const& CurrentRule = Grammar.NonTerminals[NonTermIndex].Rules[ClashingRule].DefinitionSite;
+                    ErrorString += "Line "+std::to_string(CurrentRule.line)+", col "+std::to_string(CurrentRule.character);
+                    ErrorString += "\n";
+                }
+                throw std::runtime_error(std::move(ErrorString));
             }
             NonTermIndex++;
         }

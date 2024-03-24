@@ -246,6 +246,7 @@ namespace MBCC
     struct ParseRule
     {
         bool NeedsAssignmentOrder = false;
+        MBLSP::Position DefinitionSite;
         std::vector<RuleComponent> Components;
         std::vector<SemanticAction> Actions;
         std::vector<std::pair<int,RuleComponent>> MetaComponents;
@@ -423,8 +424,8 @@ namespace MBCC
         static std::pair<Identifier,Identifier> p_ParseDef(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
         static StructMemberVariable p_ParseMemberVariable(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
         static StructDefinition p_ParseStruct(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,LSPInfo& OutInfo);
-        static MemberExpression p_ParseMemberExpression(const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,bool IsLHS,int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo);
-        static std::vector<ParseRule> p_ParseParseRules(std::string const& NonTermName,const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,char EndMarker,int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo);
+        static MemberExpression p_ParseMemberExpression(const char* Data,MBLSP::LineIndex const& Index,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,bool IsLHS,int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo);
+        static std::vector<ParseRule> p_ParseParseRules(std::string const& NonTermName,MBLSP::LineIndex const& Index,const char* Data,size_t DataSize,size_t ParseOffset,size_t* OutParseOffset,char EndMarker,int& CurrentLambdaID,std::vector<Lambda>& OutLambdas,LSPInfo& OutInfo);
         
 
         bool p_IsAssignable(StructIndex Lhs,StructIndex Rhs);
@@ -484,9 +485,16 @@ namespace MBCC
                 ConnectionTerminal = TerminalIndex;   
                 Connection = ConnectionIndex;
             }
+            GLAEdge(TerminalIndex TerminalIndex,NodeIndex ConnectionIndex,NodeIndex InitReturnPos)
+            {
+                ConnectionTerminal = TerminalIndex;   
+                Connection = ConnectionIndex;
+                ReturnPosition = InitReturnPos;
+            }
             //-1 means that it's an E connection
             TerminalIndex ConnectionTerminal = -1;
             NodeIndex Connection = -1;
+            NodeIndex ReturnPosition = -1;
         };
         struct GLANode
         {
@@ -503,9 +511,13 @@ namespace MBCC
         mutable std::vector<GLANode> m_Nodes;
         NonTerminalIndex m_NonTerminalCount = 0;
         TerminalIndex m_TerminalCount = 0;
+
+        mutable std::vector<std::vector<NonTerminalIndex>> m_NonTerminalReturnStack;
         //std::vector<NodeIndex> m_ProductionBegin;
 
-        std::vector<bool> p_LOOK(GLANode& Edge,int k) const;
+        bool p_IsFollow(NodeIndex Index) const;
+        bool p_IsBegin(NodeIndex Index) const;
+        void p_LOOK(std::vector<bool>& Result,GLANode& Edge,int k,bool& VisitedK,bool UseFollow) const;
     public:
         GLA(MBCCDefinitions const& Grammar,int k);
         //TODO optimize, currently exponential time algorithm
