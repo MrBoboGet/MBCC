@@ -20,6 +20,7 @@
             "Sources": 
             [
                 "/MBCC.cpp",
+                "/Tokenizer.cpp",
                 "/Compilers/Cpp.cpp",
                 "/Compilers/CLikeCompiler.cpp",
                 "/Compilers/CppIRParser.cpp",
@@ -34,6 +35,7 @@
             "Sources": 
             [
                 "/MBCC.cpp",
+                "/Tokenizer.cpp",
                 "/Compilers/Cpp.cpp",
                 "/Compilers/CSharp.cpp",
                 "/Compilers/CppIRParser.cpp",
@@ -50,6 +52,7 @@
             "Sources": 
             [
                 "/MBCC.cpp",
+                "/Tokenizer.cpp",
                 "/MBCC_LSP.cpp",
                 "/Compilers/Cpp.cpp",
                 "/Compilers/CSharp.cpp",

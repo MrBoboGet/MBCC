@@ -8,23 +8,6 @@
 #include <assert.h>
 namespace MBCC
 {
-    //struct Type
-    //{
-    //    //either Name != "" or Info != -1
-    //    std::string Name;
-    //    TypeInfo Info = -1;
-
-    //    Type(std::string name)
-    //    {
-    //        Name = name;   
-    //    }
-    //    Type(TypeInfo info)
-    //    {
-    //        Info = info;   
-    //    }
-    //    Type(){};
-    //};
-    
     class Expression;
     struct Expr_LOOKValue
     {

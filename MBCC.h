@@ -1,15 +1,12 @@
 #pragma once
 #include <stdint.h>
 #include <string>
-#include <type_traits>
 #include <vector>
 #include <unordered_map>
 #include <MBUtility/MBErrorHandling.h>
 #include <MBUtility/MBInterfaces.h>
 #include <utility>
 #include <variant>
-#include <regex>
-#include <deque>
 #include <MBUtility/MBMatrix.h>
 #include <set>
 
@@ -22,6 +19,8 @@
 #include <assert.h>
 
 #include "AST.h"
+
+#include "Token.h"
 namespace MBCC
 {
 
@@ -263,42 +262,7 @@ namespace MBCC
         StructIndex AssociatedStruct = -1;
         std::vector<ParseRule> Rules;
     };
-    struct TokenPosition
-    {
-        int Line = 0;    
-        int ByteOffset = 0;
-        TokenPosition() {}
-        TokenPosition(int LinePos,int NewByteOffset)
-        {
-            Line = LinePos;
-            ByteOffset = NewByteOffset;   
-        }
-        TokenPosition operator+(int Rhs) const
-        {
-            TokenPosition ReturnValue = *this;   
-            ReturnValue.ByteOffset += Rhs;
-            return ReturnValue;
-        }
-        bool operator<(TokenPosition const& Rhs) const noexcept
-        {
-            bool ReturnValue = false;
-            if(Line < Rhs.Line)
-            {
-                ReturnValue = true;    
-            } else if(Line == Rhs.Line)
-            {
-                ReturnValue = ByteOffset < Rhs.ByteOffset;
-            }
-            return(ReturnValue);
-        }
-    };
-    struct Token
-    {
-        TerminalIndex Type = -1;
-        size_t ByteOffset = 0;
-        TokenPosition Position;
-        std::string Value;    
-    };
+
     struct DependancyInfo
     {
         std::vector<StructIndex> StructureDependancyOrder; 
@@ -527,27 +491,6 @@ namespace MBCC
         //BoolTensor CalculateFIRST();
         //BoolTensor CalculateFOLLOW();
     };
-    class Tokenizer
-    {
-    private:      
-        //Easy interfac, memeory map everything   
-        size_t m_ParseOffset = 0;
-        int m_LineOffset = 0;
-        int m_LineByteOffset = 0;
-        std::string m_TextData;
-        std::regex m_Skip;
-        std::vector<std::pair<std::regex,int>> m_TerminalRegexes;
-        std::deque<Token> m_StoredTokens;
-        Token p_ExtractToken();
-        std::pair<int,int> p_GetLineAndPosition(size_t ParseOffset) const;  
-    public: 
-        Tokenizer(std::string const& SkipRegex,std::initializer_list<std::string> TerminalRegexes);
-        void SetText(std::string NewText);
-        void ConsumeToken();
-        bool IsEOF(Token const& TokenToExamine);
-        Token const& Peek(int Depth = 0);
-        std::string GetPositionString() const;
-    };
     class CPPStreamIndenter : public MBUtility::MBOctetOutputStream
     {
     private:       
@@ -615,25 +558,4 @@ namespace MBCC
         static std::string Verify(MBCCDefinitions const& InfoToWrite);
         void WriteParser(MBCCDefinitions const& Grammar,GrammarOptions const& Options,std::string const& LanguageName,std::string const& OutputBase);
     };
-
-    //class CPPParserGenerator
-    //{
-    //    std::vector<std::vector<std::string>> m_ProductionPredicates;
-
-    //    void p_WriteParser(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,
-    //            std::string const& HeaderName,
-    //            MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut);
-    //    void p_WriteHeader(MBCCDefinitions const& Grammar, MBUtility::MBOctetOutputStream& HeaderOut);
-    //    void p_WriteFunctionHeaders(MBCCDefinitions const& Grammar,MBUtility::MBOctetOutputStream& HeaderOut);
-    //    void p_WriteSource(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,
-    //            std::string const& HeaderName,MBUtility::MBOctetOutputStream& SourceOut);
-    //    void p_WriteLOOKTable(std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,MBUtility::MBOctetOutputStream& SourceOut);
-    //    std::string const& p_GetLOOKPredicate(NonTerminalIndex AssociatedNonTerminal,int Production = -1);
-    //    void p_WriteNonTerminalFunction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTerminal, MBUtility::MBOctetOutputStream& SourceOut);
-    //    void p_WriteNonTerminalProduction(MBCCDefinitions const& Grammar,NonTerminalIndex NonTerminal,int ProductionIndex,std::string const& FunctionName,MBUtility::MBOctetOutputStream& SourceOut);
-
-    //    static std::string p_GetTypeString(MBCCDefinitions const& Grammar,TypeInfo Type);
-    //public:
-    //    void WriteLLParser(MBCCDefinitions const& InfoToWrite,std::string const& HeaderName,MBUtility::MBOctetOutputStream& HeaderOut,MBUtility::MBOctetOutputStream& SourceOut,int k = 2);
-    //};
 }
