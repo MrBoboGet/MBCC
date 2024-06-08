@@ -11,6 +11,7 @@
 #include "Compilers/Cpp.h"
 #include "Compilers/CSharp.h"
 #include "Compilers/CppIRParser.h"
+#include "Compilers/MBLisp.h"
 namespace MBCC
 {
     TypeInfo BuiltinToType(std::string const& BuiltinType)
@@ -1993,6 +1994,43 @@ struct Hej1 : Hej2
         }
         return(ReturnValue);
     }
+    static std::vector<bool> h_ColumnToBoolArray(MBMath::MBDynamicMatrix<bool> const& Matrix, int k)
+    {
+        std::vector<bool> ReturnValue;
+        ReturnValue.reserve(Matrix.NumberOfRows());
+        for(int i = 0; i < Matrix.NumberOfRows();i++)
+        {
+            ReturnValue.push_back(Matrix(i,k));
+        } 
+        return ReturnValue;
+    }
+    LOOKInfo GetLookInfo(LookType const& Look)
+    {
+        LOOKInfo ReturnValue;
+        int TotalProductionSize = 0;
+        int LOOKDepth = Look[0][0].NumberOfColumns();
+        for(auto const& NonTerminalProductions : Look)
+        {
+            std::vector<std::vector<bool>>& NewMatrix = ReturnValue.Data.emplace_back();
+            auto CombinedProductions = CombineProductions(NonTerminalProductions);
+            for(int k = 0; k < CombinedProductions.NumberOfColumns();k++)
+            {
+                NewMatrix.emplace_back(h_ColumnToBoolArray(CombinedProductions,k));
+            }
+            TotalProductionSize += NonTerminalProductions.size()+1;
+            for(auto const& Production : NonTerminalProductions)
+            {
+                for(int k = 0; k < Production.NumberOfColumns();k++)
+                {
+                    NewMatrix.emplace_back(h_ColumnToBoolArray(Production,k));
+                }
+            } 
+        }  
+        ReturnValue.TotalProductions = TotalProductionSize;
+        ReturnValue.LOOKDepth = LOOKDepth;
+        ReturnValue.RowCount = Look[0][0].NumberOfRows();
+        return ReturnValue;
+    }
     std::string ParserCompilerHandler::Verify(MBCCDefinitions const& Grammar)
     {
         std::string ReturnValue;
@@ -2043,6 +2081,7 @@ struct Hej1 : Hej2
     ParserCompilerHandler::ParserCompilerHandler()
     {
         m_Compilers["cpp"] = std::make_unique<CPPParserGenerator>();
+        m_Compilers["lisp"] = std::make_unique<LispParser>();
         m_Compilers["csharp"] = std::make_unique<CSharpParserGenerator>();
         m_Compilers["cpp-ir"] = std::make_unique<CppIRParser>();
     }
@@ -2204,24 +2243,32 @@ struct Hej1 : Hej2
 //END LLParserGenerator
     
     //BEGIN CPPStreamIndenter
-    CPPStreamIndenter::CPPStreamIndenter(MBUtility::MBOctetOutputStream* StreamToConvert)
+    StreamIndenter::StreamIndenter(MBUtility::MBOctetOutputStream* StreamToConvert,char IncrCharacter,char DecrCharacter,bool IgnoreIndentChar)
     {
         m_AssociatedStream = StreamToConvert;       
+        m_IncreaseCharacter = IncrCharacter;
+        m_DecreaseCharacter = DecrCharacter;
+        m_IgnoreIndentCharacter = IgnoreIndentChar;
     }
-    size_t CPPStreamIndenter::Write(const void* DataToWrite,size_t DataSize)
+    size_t StreamIndenter::Write(const void* DataToWrite,size_t DataSize)
     {
         size_t ReturnValue = DataSize;       
         size_t ParseOffset = 0; 
         const char* CharData = (const char*)DataToWrite;
         while(ParseOffset < DataSize)
         {
-            size_t NextLWing = std::find(CharData+ParseOffset,CharData+DataSize,'{')-CharData;
-            size_t NextRWing = std::find(CharData+ParseOffset,CharData+DataSize,'}')-CharData;
+            size_t NextLWing = std::find(CharData+ParseOffset,CharData+DataSize,m_IncreaseCharacter)-CharData;
+            size_t NextRWing = std::find(CharData+ParseOffset,CharData+DataSize,m_DecreaseCharacter)-CharData;
             size_t NextNL = std::find(CharData+ParseOffset,CharData+DataSize,'\n')-CharData;
             if(NextNL != DataSize || NextRWing != DataSize || NextLWing != DataSize)
             {
                 size_t Min = std::min(std::min(NextLWing,NextRWing),NextNL);
-                m_AssociatedStream->Write(CharData+ParseOffset,Min+1-ParseOffset);
+                int IndentCharacterOffset = 1;
+                if(m_IgnoreIndentCharacter && (Min == NextLWing || Min == NextRWing))
+                {
+                    IndentCharacterOffset = 0;
+                }
+                m_AssociatedStream->Write(CharData+ParseOffset,Min+IndentCharacterOffset-ParseOffset);
                 ParseOffset = Min+1;
                 if(Min == NextRWing)
                 {
@@ -2238,7 +2285,7 @@ struct Hej1 : Hej2
                 else if(Min == NextNL)
                 {
                     int IndentToWrite = m_IndentLevel;
-                    if(ParseOffset < DataSize && CharData[ParseOffset] == '}' && IndentToWrite != 0)
+                    if(ParseOffset < DataSize && CharData[ParseOffset] == m_DecreaseCharacter && IndentToWrite != 0)
                     {
                         IndentToWrite -=1;
                     }
@@ -2255,7 +2302,7 @@ struct Hej1 : Hej2
                 ParseOffset = DataSize;
             }
         }
-        return(ReturnValue);
+        return ReturnValue;
     }
     //END CPPStreamIndenter
 }

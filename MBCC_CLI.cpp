@@ -1,6 +1,5 @@
 #include "MBCC_CLI.h"
 #include <MBUtility/MBFiles.h>
-#include <fstream>
 
 namespace MBCC
 {

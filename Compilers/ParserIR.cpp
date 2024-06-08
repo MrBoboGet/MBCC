@@ -167,7 +167,7 @@ namespace MBCC
         std::vector<Statement> ReturnValue;
         if(ComponentToWrite.IsInline)
         {
-            std::vector<Statement> Rules;
+            std::vector<Statement_If> Rules;
             auto const& InlineNonTerm = Grammar.NonTerminals[ComponentToWrite.ComponentIndex];
             for(int i = 0; i < InlineNonTerm.Rules.size();i++)
             {

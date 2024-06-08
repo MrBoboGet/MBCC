@@ -89,7 +89,7 @@ namespace MBCC
             throw std::runtime_error("Error opening output source file \""+OutputBase+".cpp\"");
         }
         MBUtility::MBFileOutputStream SourceStream(&SourceFile);
-        CPPStreamIndenter SourceIndent(&SourceStream);
+        StreamIndenter SourceIndent(&SourceStream,'{','}');
         SourceIndent<<"using System;\n";
         SourceIndent<<"using System.Collections.Generic;\n";
         SourceIndent<<"namespace Parser\n{\n";

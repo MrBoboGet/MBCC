@@ -19,11 +19,10 @@
 #include <assert.h>
 
 #include "AST.h"
-
 #include "Token.h"
+
 namespace MBCC
 {
-
     struct Identifier
     {
         std::string Value;
@@ -491,13 +490,16 @@ namespace MBCC
         //BoolTensor CalculateFIRST();
         //BoolTensor CalculateFOLLOW();
     };
-    class CPPStreamIndenter : public MBUtility::MBOctetOutputStream
+    class StreamIndenter : public MBUtility::MBOctetOutputStream
     {
     private:       
         MBUtility::MBOctetOutputStream* m_AssociatedStream = nullptr;
         int m_IndentLevel = 0;
+        char m_IncreaseCharacter = '{';
+        char m_DecreaseCharacter = '}';
+        bool m_IgnoreIndentCharacter = false;
     public:
-        CPPStreamIndenter(MBUtility::MBOctetOutputStream* StreamToConvert);
+        StreamIndenter(MBUtility::MBOctetOutputStream* StreamToConvert,char IncreaseCharacter,char DecreaseCharacter,bool IgnoreIndentChar = false);
         size_t Write(const void* DataToWrite,size_t DataSize) override;
     };
 
@@ -537,6 +539,17 @@ namespace MBCC
     TypeInfo BuiltinToType(std::string const& BuiltinType);
     std::vector<bool> CalculateENonTerminals(MBCCDefinitions const& Grammar);
     bool RulesAreDisjunct(std::vector<MBMath::MBDynamicMatrix<bool>> const& ProductionsToVerify);
+
+    struct LOOKInfo
+    {
+        int TotalProductions = 0;
+        int LOOKDepth = 0;
+        int RowCount = 0;
+        std::vector<std::vector<std::vector<bool>>> Data;
+    };
+
+    LOOKInfo GetLookInfo(LookType const& Look);
+
     class ParserCompiler
     {
     public:

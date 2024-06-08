@@ -24,6 +24,7 @@
                 "/Compilers/Cpp.cpp",
                 "/Compilers/CLikeCompiler.cpp",
                 "/Compilers/CppIRParser.cpp",
+                "/Compilers/MBLisp.cpp",
                 "/Compilers/ParserIR.cpp",
                 "/Compilers/CSharp.cpp"
             ],
@@ -39,6 +40,7 @@
                 "/Compilers/Cpp.cpp",
                 "/Compilers/CSharp.cpp",
                 "/Compilers/CppIRParser.cpp",
+                "/Compilers/MBLisp.cpp",
                 "/Compilers/ParserIR.cpp",
                 "/Compilers/CLikeCompiler.cpp",
                 "/MBCC_CLI.cpp",
@@ -57,6 +59,7 @@
                 "/Compilers/Cpp.cpp",
                 "/Compilers/CSharp.cpp",
                 "/Compilers/CppIRParser.cpp",
+                "/Compilers/MBLisp.cpp",
                 "/Compilers/ParserIR.cpp",
                 "/Compilers/CLikeCompiler.cpp",
                 "/MBCC_LSPMain.cpp"

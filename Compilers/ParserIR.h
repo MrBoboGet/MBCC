@@ -102,7 +102,7 @@ namespace MBCC
     struct Statement_IfChain
     {
         //implicit else at the end
-        std::vector<Statement> Alternatives;
+        std::vector<Statement_If> Alternatives;
     };
     struct Statement_While
     {
@@ -380,7 +380,7 @@ namespace MBCC
             if(!VisitAndPoll(Visitor,If)) return;
             for(auto const& Statement : If.Alternatives)
             {
-                Traverse(Visitor,Statement);
+                //Traverse(Visitor,Statement);
             }
         }
         else if(StatementToTraverse.IsType<Statement_While>())

@@ -218,8 +218,8 @@ namespace MBCC
             }
             NonTermIndex++;
         }
-        CPPStreamIndenter HeaderIndent(&HeaderOut);
-        CPPStreamIndenter SourceIndent(&SourceOut);
+        StreamIndenter HeaderIndent(&HeaderOut,'{','}');
+        StreamIndenter SourceIndent(&SourceOut,'{','}');
         p_WriteParser(Grammar,TotalProductions,HeaderName,HeaderIndent,SourceIndent);
     } 
     void CPPParserGenerator::WriteParser(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& TotalProductions,std::string const& OutputBase)
@@ -237,8 +237,8 @@ namespace MBCC
         std::string HeaderName = MBUnicode::PathToUTF8(std::filesystem::path(OutputBase).filename())+".h";
         MBUtility::MBFileOutputStream HeaderStream(&HeaderFile);
         MBUtility::MBFileOutputStream SourceStream(&SourceFile);
-        CPPStreamIndenter HeaderIndent(&HeaderStream);
-        CPPStreamIndenter SourceIndent(&SourceStream);
+        StreamIndenter HeaderIndent(&HeaderStream,'{','}');
+        StreamIndenter SourceIndent(&SourceStream,'{','}');
         p_WriteParser(Grammar,TotalProductions,HeaderName,HeaderIndent,SourceIndent);
     }
     void CPPParserGenerator::p_WriteParser(MBCCDefinitions const& Grammar,std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> const& ProductionsLOOk,
