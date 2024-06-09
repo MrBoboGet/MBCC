@@ -2011,15 +2011,18 @@ struct Hej1 : Hej2
         int LOOKDepth = Look[0][0].NumberOfColumns();
         for(auto const& NonTerminalProductions : Look)
         {
-            std::vector<std::vector<bool>>& NewMatrix = ReturnValue.Data.emplace_back();
+            //std::vector<std::vector<bool>>& NewMatrix = ReturnValue.Data.emplace_back();
             auto CombinedProductions = CombineProductions(NonTerminalProductions);
+            std::vector<std::vector<bool>> Combined;
             for(int k = 0; k < CombinedProductions.NumberOfColumns();k++)
             {
-                NewMatrix.emplace_back(h_ColumnToBoolArray(CombinedProductions,k));
+                Combined.emplace_back(h_ColumnToBoolArray(CombinedProductions,k));
             }
+            ReturnValue.Data.emplace_back(std::move(Combined));
             TotalProductionSize += NonTerminalProductions.size()+1;
             for(auto const& Production : NonTerminalProductions)
             {
+                std::vector<std::vector<bool>>& NewMatrix = ReturnValue.Data.emplace_back();
                 for(int k = 0; k < Production.NumberOfColumns();k++)
                 {
                     NewMatrix.emplace_back(h_ColumnToBoolArray(Production,k));
@@ -2074,9 +2077,36 @@ struct Hej1 : Hej2
             throw std::runtime_error("Error creating source code: no compiler for langauge \""+LanguageName+"\"");
         }
         CompIt->second->WriteParser(Grammar,TotalProductions,OutputBase);
-        //CPPStreamIndenter HeaderIndent(&HeaderOut);
-        //CPPStreamIndenter SourceIndent(&SourceOut);
-        //p_WriteParser(Grammar,TotalProductions,HeaderName,HeaderIndent,SourceIndent);
+    }
+    ParserInfo ParserCompilerHandler::CreateParserInfo(MBCCDefinitions Grammar,GrammarOptions Options)
+    {
+        ParserInfo ReturnValue;
+        std::vector<bool> ERules = CalculateENonTerminals(Grammar); 
+        ParserCompilerHandler::VerifyNotLeftRecursive(Grammar,ERules);
+        GLA GrammarGLA(Grammar,Options.k);
+        std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> TotalProductions = ParserCompilerHandler::CalculateProductionsLinearApproxLOOK(Grammar,ERules,GrammarGLA,Options.k);
+        NonTerminalIndex NonTermIndex = 0;
+        for(auto const& Productions : TotalProductions)
+        {
+            if(auto ClashingRules = NonDisjunctRules(Productions); ClashingRules.size() != 0)
+            {
+                std::string ErrorString = "Error creating linear-approximate-LL("+std::to_string(Options.k)+") parser for grammar: Rule \""+Grammar.NonTerminals[NonTermIndex].Name+"\" is non deterministic\n";
+                ErrorString += "Clashing alternatives:\n";
+                for(auto const& ClashingRule : ClashingRules)
+                {
+                    auto const& CurrentRule = Grammar.NonTerminals[NonTermIndex].Rules[ClashingRule].DefinitionSite;
+                    ErrorString += "Line "+std::to_string(CurrentRule.line)+", col "+std::to_string(CurrentRule.character);
+                    ErrorString += "\n";
+                }
+                throw std::runtime_error(std::move(ErrorString));
+            }
+            NonTermIndex++;
+        }
+        ReturnValue.ERules = std::move(ERules);
+        ReturnValue.Grammar = std::move(Grammar);
+        ReturnValue.LOOK = std::move(TotalProductions);
+        ReturnValue.Options = std::move(Options);
+        return ReturnValue;
     }
     ParserCompilerHandler::ParserCompilerHandler()
     {

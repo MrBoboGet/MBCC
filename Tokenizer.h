@@ -26,7 +26,9 @@ namespace MBCC
         Token p_ExtractToken() 
         {
             Token ReturnValue;
-            ReturnValue.Type = m_TerminalRegexes.size()+1;
+            //TODO verify which is correct...
+            //ReturnValue.Type = m_TerminalRegexes.size()+1;
+            ReturnValue.Type = m_TerminalRegexes.size();
             if(front == end)
             {
                 return(ReturnValue);
@@ -160,7 +162,7 @@ namespace MBCC
             m_LineOffset = 0;
             //m_TextData = std::move(NewText);
             this->front = front;
-            this->front = front;
+            this->end = end;
             m_StoredTokens.clear();
         }
         std::string GetPositionString() const

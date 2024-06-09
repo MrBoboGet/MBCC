@@ -559,6 +559,13 @@ namespace MBCC
     {
         int k = 1;
     };
+    struct ParserInfo
+    {
+        MBCCDefinitions Grammar;
+        GrammarOptions Options;
+        std::vector<bool> ERules;
+        LookType LOOK;
+    };
     class ParserCompilerHandler
     {
     private:
@@ -566,6 +573,8 @@ namespace MBCC
     public:
         ParserCompilerHandler();
         ParserCompilerHandler(ParserCompilerHandler const&) = delete;
+
+        static ParserInfo CreateParserInfo(MBCCDefinitions Grammar,GrammarOptions Options);
         static void VerifyNotLeftRecursive(MBCCDefinitions const& Grammar,std::vector<bool> const& ERules);
         static std::vector<std::vector<MBMath::MBDynamicMatrix<bool>>> CalculateProductionsLinearApproxLOOK(MBCCDefinitions const& Grammar,std::vector<bool> const& ERules,GLA const& GrammarGLA,int k);
         static std::string Verify(MBCCDefinitions const& InfoToWrite);
