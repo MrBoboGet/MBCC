@@ -200,7 +200,14 @@ namespace MBCC
         Statement_DeclareVar Variable;
         Statement_AssignVar Assignment;
     };
+
+    struct IROptions
+    {
+        bool FillPolymorphic = true;
+    };
+
     void ConvertRuleBody( MBCCDefinitions const& Grammar,
+            IROptions const& Options,
             LookType  const& TotalProductions,
             std::vector<int> const& NonTermOffset,
             NonTerminalIndex NonTermIndex,
@@ -209,28 +216,34 @@ namespace MBCC
             std::unordered_map<std::string,DelayedAssignment>& DelayedAssignments);
     Expression GetLookPredicate(
             MBCCDefinitions const& Grammar,
+            IROptions const& Options,
             LookType const& TotalProductions,
             std::vector<int> const& NonTermOffset,
             NonTerminalIndex NonTerminal,
             int Production);
     std::vector<Statement> GetProductionContent(
+            IROptions const& Options,
             MBCCDefinitions const& Grammar,
             LookType const& TotalProductions, 
             std::vector<int> const& NonTermOffset,
             NonTerminalIndex TerminalIndex,
             int ProductionIndex);
     Function ConvertDirectionFunction(MBCCDefinitions const& Grammar,
+            IROptions const& Options,
             LookType const& TotalProductions,
             std::vector<int> const& NonTermOffset,
             NonTerminalIndex TerminalIndex,
             int ProductionIndex);
+    std::vector<Statement> GetFillFunctionContent(MBCCDefinitions const& Grammar,IROptions const& Options,LookType const& TotalProductions,
+            std::vector<int> const& NonTermOffset,NonTerminalIndex TerminalIndex,int ProductionIndex);
     Function ConvertFillFunction(MBCCDefinitions const& Grammar,
+            IROptions const& Options,
             LookType const& TotalProductions,
             std::vector<int> const& NonTermOffset,
             NonTerminalIndex TerminalIndex,
             int ProductionIndex);
     std::vector<int> CalculateNonTermOffsets(LookType const& Look);
-    std::vector<Function> ConvertToIR(MBCCDefinitions const& Grammar,LookType const& TotalProductions);
+    std::vector<Function> ConvertToIR(MBCCDefinitions const& Grammar,IROptions const& Options,LookType const& TotalProductions);
 
 
     template<typename T,typename... Args>
