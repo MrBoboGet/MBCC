@@ -356,8 +356,8 @@ namespace MBCC
         bool operator()(Statement_Exception const& Statement)
         {
             *m_SourceStream<<
-                "(error (+ \"Error parsing "<<Statement.NonTerminalName<<" at position\" " 
-                <<" (str (position (peek tokenizer))) \": expected "<<Statement.ExpectedName<<"\"))\n";
+                "(error (+ \"Error parsing "<<Statement.NonTerminalName<<" at position \" " 
+                <<" (str :position (peek tokenizer 0)) \": expected "<<Statement.ExpectedName<<"\"))\n";
             return false;
         }
         bool operator()(Statement_PopToken const& Statement)

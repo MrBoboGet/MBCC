@@ -165,6 +165,12 @@ namespace MBCC
             this->end = end;
             m_StoredTokens.clear();
         }
+        void SetParseOffset(size_t NewOffset)
+        {
+            m_ParseOffset = NewOffset;       
+            m_LineByteOffset = 0;
+            m_LineOffset = 0;
+        }
         std::string GetPositionString() const
         {
             std::string ReturnValue;       

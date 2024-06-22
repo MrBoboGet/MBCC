@@ -403,7 +403,7 @@ namespace MBCC
         }
         else
         {
-            auto Content = GetFillFunctionContent(Grammar,Options,TotalProductions,NonTermOffset,TerminalIndex,-1);
+            auto Content = GetFillFunctionContent(Grammar,Options,TotalProductions,NonTermOffset,TerminalIndex,ProductionIndex);
             ReturnValue.Content.insert(ReturnValue.Content.end(),std::make_move_iterator(Content.begin()),std::make_move_iterator(Content.end()));
         }
 
@@ -532,6 +532,10 @@ namespace MBCC
             for(int k = 0; k < NonTerm.Rules.size();k++)
             {
                 ReturnValue.push_back(ConvertFillFunction(Grammar,Options,TotalProductions,NonTermOffset,i,k));
+                if(!Options.FillPolymorphic)
+                {
+                    ReturnValue.push_back(ConvertDirectionFunction(Grammar,Options,TotalProductions,NonTermOffset,i,k));
+                }
             }
             ReturnValue.push_back(ConvertFillFunction(Grammar,Options,TotalProductions,NonTermOffset,i,-1));
             ReturnValue.push_back(ConvertDirectionFunction(Grammar,Options,TotalProductions,NonTermOffset,i,-1));
