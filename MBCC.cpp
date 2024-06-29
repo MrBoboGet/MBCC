@@ -1726,7 +1726,7 @@ struct Hej1 : Hej2
         } 
     }
     //NOTE exponential time implementation
-    void GLA::p_LOOK(std::vector<bool>& Result,GLANode& Node,int k,bool& VisitedK,bool UseFollow) const
+    void GLA::p_LOOK(std::vector<bool>& Result,GLANode& Node,int k,int OriginalTerminal,bool& Visited,int& HighestFollowK,bool UseFollow) const
     {
         if(k == -1)
         {
@@ -1746,7 +1746,6 @@ struct Hej1 : Hej2
                 if(k == 0)
                 {
                     Result[Edge.ConnectionTerminal] = true;
-                    VisitedK = true;
                     //EOF marker, special in that it both counts as a terminal
                     //and should continue the search
                     if(Edge.ConnectionTerminal == m_TerminalCount)
@@ -1754,6 +1753,11 @@ struct Hej1 : Hej2
                         NewK = 0;
                         NewConnection = Edge.Connection;
                         //p_LOOK(Result,m_Nodes[Edge.Connection],0,VisitedK,UseFollow);
+                    }
+                    else
+                    {
+                        NewK = k-1;
+                        Visited = true;
                     }
                 }   
                 else 
@@ -1775,23 +1779,34 @@ struct Hej1 : Hej2
                 {
                     if(m_NonTerminalReturnStack[NewConnection - m_NonTerminalCount].size() != 0)
                     {
-                        p_LOOK(Result,m_Nodes[m_NonTerminalReturnStack[NewConnection-m_NonTerminalCount].back()],NewK,VisitedK,UseFollow);
+                        p_LOOK(Result,m_Nodes[m_NonTerminalReturnStack[NewConnection-m_NonTerminalCount].back()],NewK,
+                                OriginalTerminal,Visited,HighestFollowK,UseFollow);
                     }
                     else
                     {
-                        p_LOOK(Result,m_Nodes[NewConnection],NewK,VisitedK,UseFollow);
+                        if(UseFollow)
+                        {
+                            p_LOOK(Result,m_Nodes[NewConnection],NewK,OriginalTerminal,Visited,HighestFollowK,UseFollow);
+                        }
+                        else
+                        {
+                            if(NewK > HighestFollowK)
+                            {
+                                HighestFollowK = NewK;
+                            }
+                        }
                     }
                 }
                 else if(p_IsBegin(NewConnection))
                 {
                     assert(Edge.ReturnPosition != -1);
                     m_NonTerminalReturnStack[NewConnection].push_back(Edge.ReturnPosition);
-                    p_LOOK(Result,m_Nodes[NewConnection],NewK,VisitedK,UseFollow);
+                    p_LOOK(Result,m_Nodes[NewConnection],NewK,OriginalTerminal,Visited,HighestFollowK,UseFollow);
                     m_NonTerminalReturnStack[NewConnection].pop_back();
                 }
                 else
                 {
-                    p_LOOK(Result,m_Nodes[Edge.Connection],NewK,VisitedK,UseFollow);
+                    p_LOOK(Result,m_Nodes[Edge.Connection],NewK,OriginalTerminal,Visited,HighestFollowK,UseFollow);
                 }
             }
         }
@@ -1812,14 +1827,23 @@ struct Hej1 : Hej2
         for(int i = 0; i < k;i++)
         {
             MBMath::MBDynamicMatrix<bool> Visited(k,m_Nodes.size());
+            int HighestFollowK = -1;
             bool VisitedK = false;
             std::vector<bool> CurrentLook(m_TerminalCount+1,false);
-            p_LOOK(CurrentLook,Node,i,VisitedK,false);
+            p_LOOK(CurrentLook,Node,i,NonTerminal,VisitedK,HighestFollowK,false);
 
-            if(!VisitedK)
+            if(HighestFollowK != -1)
             {
                 //slightly inefficient
-                p_LOOK(CurrentLook,m_Nodes[m_NonTerminalCount+NonTerminal],i,VisitedK,true);
+                int NewK = HighestFollowK;
+                HighestFollowK = -1;
+                VisitedK = false;
+                p_LOOK(CurrentLook,m_Nodes[m_NonTerminalCount+NonTerminal],NewK,NonTerminal,VisitedK,HighestFollowK,false);
+                if(HighestFollowK != -1)
+                {
+                    //Most pessimistic assumptions
+                    p_LOOK(CurrentLook,Node,i,NonTerminal,VisitedK,HighestFollowK,true);
+                }
             }
             for(int j = 0; j < m_TerminalCount+1;j++)
             {

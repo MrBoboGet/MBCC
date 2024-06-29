@@ -480,7 +480,7 @@ namespace MBCC
 
         bool p_IsFollow(NodeIndex Index) const;
         bool p_IsBegin(NodeIndex Index) const;
-        void p_LOOK(std::vector<bool>& Result,GLANode& Edge,int k,bool& VisitedK,bool UseFollow) const;
+        void p_LOOK(std::vector<bool>& Result,GLANode& Edge,int k,int OriginalTerminal,bool& Visited,int& HighestFollowK,bool UseFollow) const;
     public:
         GLA(MBCCDefinitions const& Grammar,int k);
         //TODO optimize, currently exponential time algorithm
